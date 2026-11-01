@@ -38,6 +38,7 @@ import {
   createRepos,
   createThreadMessageInTransaction,
   eligibleWaitingTextAnswer,
+  ensureUserThread,
   expireComputerExecutionLeases,
   IsolationError,
   lockOwnedGroup,
@@ -337,12 +338,14 @@ export async function resolveThreadTarget(
   const groupRepos = createGroupRepos(prisma);
   if (input.botId) {
     const bot = await repos.getBot(actor, input.botId, options);
-    if (!bot.thread) throw new IsolationError();
+    const thread =
+      bot.thread ?? (await ensureUserThread(prisma, actor, bot.id));
+    if (!thread || thread.userId !== actor.userId) throw new IsolationError();
     return {
       kind: "bot",
       botId: bot.id,
-      threadId: bot.thread.id,
-      bot,
+      threadId: thread.id,
+      bot: { ...bot, thread },
     };
   }
   if (input.groupId) {

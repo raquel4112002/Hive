@@ -64,6 +64,12 @@ model User {
   signupSurvey                SignupSurvey?
   computerRuns                ComputerRun[]
   devices                     UserDevice[]
+  /// Hive modification: technical organization account. It cannot sign in.
+  hiveService                 Boolean                      @default(false)
+  /// Hive modification: set when the person is archived. Hidden except conversations/inspect.
+  hiveArchivedAt              DateTime?
+  /// Hive modification: when archived content is deleted. Null keeps it until then.
+  hiveDeleteAfter             DateTime?
 
   @@unique([email])
   @@map("user")
@@ -483,6 +489,9 @@ model DeploymentSettings {
   defaultModelId                  String?
   deploymentModelCredentialCipher String?
   computerHost                    String?
+  /// Hive modification: archive (default) or delete. Archive waits personArchiveDays.
+  personRemovalMode               String   @default("archive")
+  personArchiveDays               Int      @default(30)
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
 
@@ -783,6 +792,8 @@ model Thread {
   externalConversationId      String?    @unique
   externalConversation        ExternalConversation? @relation(fields: [externalConversationId], references: [id], onDelete: Cascade)
   userId                      String
+  /// Hive modification: set on a routine's own thread. Person threads leave this empty.
+  routineId                   String?
   createdAt                   DateTime   @default(now())
   nextEventSeq                Int        @default(0)
   nextMessageSeq              Int        @default(0)
@@ -800,6 +811,7 @@ model Thread {
 
   @@index([spaceId])
   @@index([spaceId, userId])
+  @@index([routineId])
   @@map("threads")
 }
 
@@ -2211,4 +2223,113 @@ model CapabilityInstallSpace {
   @@id([installId, spaceId])
   @@index([spaceId, userId])
   @@map("capability_install_spaces")
+}
+
+/// Hive modification: product role. Not Better Auth's Member.role.
+model HiveRole {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  role           String
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("hive_roles")
+}
+
+/// Hive modification: a department belongs to the organization, not a space.
+model Department {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  @@unique([organizationId, name])
+  @@map("departments")
+}
+
+model DepartmentMember {
+  id           String @id @default(cuid())
+  departmentId String
+  userId       String
+
+  @@unique([departmentId, userId])
+  @@index([userId])
+  @@map("department_members")
+}
+
+model BotAssignment {
+  id               String   @id @default(cuid())
+  botId            String
+  userId           String
+  assignedByUserId String
+  createdAt        DateTime @default(now())
+
+  @@unique([botId, userId])
+  @@index([userId])
+  @@map("bot_assignments")
+}
+
+model BotDepartmentAssignment {
+  id               String   @id @default(cuid())
+  botId            String
+  departmentId     String
+  assignedByUserId String
+  createdAt        DateTime @default(now())
+
+  @@unique([botId, departmentId])
+  @@map("bot_department_assignments")
+}
+
+model BotConnection {
+  id              String   @id @default(cuid())
+  botId           String
+  connectionId    String
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  @@unique([botId, connectionId])
+  @@map("bot_connections")
+}
+
+model RoutineRecipient {
+  id           String  @id @default(cuid())
+  routineId    String
+  userId       String?
+  departmentId String?
+
+  @@index([routineId])
+  @@map("routine_recipients")
+}
+
+/// Hive modification: one dedicated computer slot per person on a bot.
+model BotUserComputer {
+  id           String    @id @default(cuid())
+  botId        String
+  userId       String
+  computerId   String?
+  state        String    @default("stopped")
+  lastActiveAt DateTime?
+  queuedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([botId, userId])
+  @@index([state, queuedAt])
+  @@map("bot_user_computers")
+}
+
+/// Hive modification: short lease for conversations/inspect. No message text.
+model ConversationGrant {
+  id          String   @id @default(cuid())
+  threadId    String
+  actorUserId String
+  reason      String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([threadId, actorUserId])
+  @@map("conversation_grants")
 }

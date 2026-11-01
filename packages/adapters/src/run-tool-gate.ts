@@ -578,7 +578,7 @@ export async function auditToolCall(
     outcome,
     runId: ctx.runId,
     threadId: ctx.thread.id,
-    metadata,
+    metadata: { ...metadata, userId: ctx.run.userId },
   });
 }
 

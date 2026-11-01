@@ -1,6 +1,7 @@
 import type { ConnectorCall, ConnectorTool } from "@rakazo/adapter-kit";
 import { BOT_INSTRUCTIONS_MAX_LENGTH } from "@rakazo/contracts";
 import { redactSecrets } from "@rakazo/core";
+import { speakerMayDelegate } from "@rakazo/db";
 import { prepareAgentConnectionResponse } from "./agent-connections.js";
 import type { FleetCardSummary } from "./approval-ask.js";
 import {
@@ -294,6 +295,13 @@ export async function prepareToolRequest(
       select: { fleetManagement: true },
     });
     if (!live?.fleetManagement) return { error: "This tool is disabled for this bot." };
+    const targetId = typeof args.bot_id === "string" ? args.bot_id : undefined;
+    if (
+      targetId &&
+      !(await speakerMayDelegate(deps.prisma, bot.id, run.userId, targetId, run.spaceId))
+    ) {
+      return { error: "That bot is not assigned to you." };
+    }
     if (!ctx.source.ownerStartedRun)
       return { error: "Bot management tools need a run you started." };
     if (fleetWrite && !(await neverAsks(ctx)) && (await ctx.trust.receivedOutsideMessage()))

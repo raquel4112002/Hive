@@ -50,6 +50,7 @@ import type { ComputerRunEnd, PrismaClient } from "@rakazo/db";
 import {
   createRepos,
   expireComputerExecutionLeases,
+  hiveScreenDecision,
   IsolationError,
   parseComputerMode,
   recordComputerRunEnd,
@@ -74,9 +75,12 @@ export function computerRoutes(ctx: RouterContext) {
   const { deps, repos, taughtSkills, authed } = ctx;
   return {
     computer: {
-      status: authed.computer.status.handler(async ({ context, input }) =>
-        computerStatus(deps, context.actor, input.botId),
-      ),
+      status: authed.computer.status.handler(async ({ context, input }) => {
+        if ((await hiveScreenDecision(deps.prisma, context.actor, input.botId)) === "deny") {
+          throw new IsolationError();
+        }
+        return computerStatus(deps, context.actor, input.botId);
+      }),
       boot: authed.computer.boot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
@@ -749,6 +753,9 @@ export function computerRoutes(ctx: RouterContext) {
         };
       }),
       screenUrl: authed.computer.screenUrl.handler(async ({ context, input }) => {
+        if ((await hiveScreenDecision(deps.prisma, context.actor, input.botId)) === "deny") {
+          return { url: null };
+        }
         let bot = await repos.getBot(context.actor, input.botId);
         if (await expireStaleComputerControl(deps, bot.computer)) {
           bot = await repos.getBot(context.actor, input.botId);
@@ -803,6 +810,9 @@ export function computerRoutes(ctx: RouterContext) {
         };
       }),
       heartbeat: authed.computer.heartbeat.handler(async ({ context, input }) => {
+        if ((await hiveScreenDecision(deps.prisma, context.actor, input.botId)) === "deny") {
+          return { ok: true as const };
+        }
         const bot = await repos.getBot(context.actor, input.botId);
         if (bot.computer?.state === "running" && bot.computer.providerRef) {
           await deps.prisma.computer.updateMany({

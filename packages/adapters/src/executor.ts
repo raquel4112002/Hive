@@ -33,6 +33,7 @@ import {
 } from "@rakazo/core";
 import {
   effectiveMemoryScope,
+  hiveConnectionWhere,
   isPartialReplyClientNonce,
   isTooManyDatabaseConnections,
   loadRunHistoryMessages,
@@ -450,6 +451,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 })
               )?.blocks as MessageBlock[] | undefined)
             : undefined;
+        const hiveConnections = await hiveConnectionWhere(deps.prisma, run.botId, run.spaceId);
         const channelId = messagingChannelId(sourceBlocks);
         const messagingChannelRun = isMessagingChannelRun(run.trigger, sourceBlocks);
         const [
@@ -480,7 +482,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             : Promise.resolve(undefined),
           deps.prisma.task.findUniqueOrThrow({ where: { id: run.taskId } }),
           deps.prisma.connection.findMany({
-            where: { userId: run.userId, spaceId: run.spaceId },
+            where: hiveConnections ?? { userId: run.userId, spaceId: run.spaceId },
             select: {
               id: true,
               connectorId: true,
@@ -498,15 +500,25 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           deps.prisma.taughtSkill.findMany({
             where: { botId: run.botId, spaceId: run.spaceId, status: "saved" },
           }),
-          listAgentSkillRecords(deps.prisma, {
-            spaceId: run.spaceId,
-            userId: run.userId,
-          }),
+          hiveConnections
+            ? Promise.resolve([] as Awaited<ReturnType<typeof listAgentSkillRecords>>)
+            : listAgentSkillRecords(deps.prisma, {
+                spaceId: run.spaceId,
+                userId: run.userId,
+              }),
           loadBotCommandEnvironment(deps.prisma, deps.secretStore, run),
           loadLoginPasswordRedactions(deps.prisma, deps.secretStore, run),
           deps.paymentWallet ? loadPurchaseRedactions(deps, run) : [],
           loadRunLoginRedactions(deps.prisma, deps.secretStore, run, run.id),
         ]);
+        if (hiveConnections) {
+          const slot = await deps.prisma.botUserComputer.findUnique({
+            where: { botId_userId: { botId: run.botId, userId: run.userId } },
+          });
+          bot.computer = slot?.computerId
+            ? await deps.prisma.computer.findUnique({ where: { id: slot.computerId } })
+            : null;
+        }
         const historySearchBeforeSeq =
           contextStrategy !== "current" && run.sourceMessageId
             ? (messages.find((message) => message.id === run.sourceMessageId)?.seq ??

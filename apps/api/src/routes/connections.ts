@@ -10,6 +10,7 @@ import {
 import type { Actor } from "@rakazo/contracts";
 import type { Prisma, PrismaClient } from "@rakazo/db";
 import {
+  hiveConnectionOwnerId,
   IsolationError,
   ProviderTransactionBusyError,
   recordSecurityEvent,
@@ -276,6 +277,7 @@ export function connectionsRoutes(ctx: RouterContext) {
         }));
       }),
       begin: authed.connections.begin.handler(async ({ context, input }) => {
+        const ownerId = await hiveConnectionOwnerId(deps.prisma, context.actor);
         const connector =
           deps.integrationSettings &&
           (input.connectorId === "composio" || input.connectorId === "pipedream")
@@ -297,7 +299,7 @@ export function connectionsRoutes(ctx: RouterContext) {
             const existing = await tx.connection.findMany({
               where: {
                 spaceId: context.actor.spaceId,
-                userId: context.actor.userId,
+                userId: ownerId,
                 connectorId: input.connectorId,
                 provider: input.provider,
               },
@@ -319,7 +321,7 @@ export function connectionsRoutes(ctx: RouterContext) {
             return tx.connection.create({
               data: {
                 spaceId: context.actor.spaceId,
-                userId: context.actor.userId,
+                userId: ownerId,
                 connectorId: input.connectorId,
                 provider: input.provider,
                 displayName: input.displayName,

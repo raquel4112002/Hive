@@ -12,6 +12,7 @@ import {
   isOneShotRoutineCrons,
   nextRoutineRunDateAcross,
 } from "@rakazo/core";
+import { ensureRoutineThread, IsolationError } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { sanitizedError } from "@rakazo/logging/monitoring";
 import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
@@ -122,7 +123,6 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
   if (await deferFutureRoutine(deps.jobs, routineId, scheduledAt)) return;
   const bot = await deps.prisma.bot.findUnique({
     where: { id: routine.botId },
-    include: { thread: true },
   });
   if (bot?.archivedAt) {
     // Archiving pauses a bot's routines; re-pause one that slipped back to active.
@@ -132,7 +132,25 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
     });
     return;
   }
-  if (!bot?.thread) return;
+  if (!bot) return;
+  let routineThread: { id: string } | null = null;
+  try {
+    routineThread = await ensureRoutineThread(deps.prisma, {
+      routineId: routine.id,
+      botId: routine.botId,
+      spaceId: routine.spaceId,
+    });
+  } catch (error) {
+    if (error instanceof IsolationError) return;
+    throw error;
+  }
+  const legacyThread = routineThread
+    ? null
+    : await deps.prisma.thread.findFirst({
+        where: { botId: bot.id, routineId: null },
+        select: { id: true },
+      });
+  if (!routineThread && !legacyThread && !routine.threadId) return;
   const targetThread = routine.threadId
     ? await deps.prisma.thread.findFirst({
         where: {
@@ -151,7 +169,8 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         select: { id: true },
       })
     : null;
-  const thread = targetThread ?? bot.thread;
+  const thread = targetThread ?? routineThread ?? legacyThread;
+  if (!thread) return;
   // A change trigger checks first, without a model; only news becomes a run.
   const watchTick =
     routine.watch == null

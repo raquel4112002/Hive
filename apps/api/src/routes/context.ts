@@ -36,7 +36,16 @@ import {
   modelSupportsRole,
   OPENAI_COMPATIBLE_PROVIDER_ID,
 } from "@rakazo/contracts";
-import { createGroupRepos, createRepos, recordSecurityEvent, runAsTenant } from "@rakazo/db";
+import {
+  createGroupRepos,
+  createRepos,
+  ensureMemberRole,
+  HIVE_USER_BLOCKED,
+  IsolationError,
+  recordAuditEvent,
+  recordSecurityEvent,
+  runAsTenant,
+} from "@rakazo/db";
 import { createAgentImportServices } from "../agent-import-services.js";
 import { createAgentSkillsService } from "../agent-skills.js";
 import { createBotRemoval } from "../bot-removal.js";
@@ -341,10 +350,23 @@ export function createRouterContext(deps: RouterDeps) {
   const agentSkills = createAgentSkillsService(deps.prisma);
 
   const authed = os
-    .use(async ({ context, next }) => {
+    .use(async ({ context, next, path }, input) => {
       const actor = context.actor;
       if (!actor) throw new ORPCError("UNAUTHORIZED");
-      return asTenant(actor, () => next({ context: { ...context, actor } }));
+      const hive = await ensureMemberRole(deps.prisma, actor);
+      const procedure = path.join(".");
+      if (hive?.archived || (hive?.role === "USER" && HIVE_USER_BLOCKED.has(procedure))) {
+        const target = hiveTargetId(input);
+        await recordAuditEvent({
+          action: "hive.access.denied",
+          actor: { type: "user", id: actor.userId },
+          spaceId: actor.spaceId,
+          target: target ? { type: "route", id: target } : { type: "route" },
+          metadata: { route: procedure },
+        });
+        throw new IsolationError();
+      }
+      return runAsTenant(actor, () => next({ context: { ...context, actor } }));
     })
     .use(async ({ context, next, path }, input) => {
       const result = await next();
@@ -410,3 +432,12 @@ export function createRouterContext(deps: RouterDeps) {
 }
 
 export type RouterContext = ReturnType<typeof createRouterContext>;
+
+function hiveTargetId(input: unknown): string | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  for (const key of ["botId", "threadId", "id", "connectionId", "serverId"]) {
+    const value = (input as Record<string, unknown>)[key];
+    if (typeof value === "string") return value;
+  }
+  return undefined;
+}

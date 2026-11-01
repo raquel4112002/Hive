@@ -1332,6 +1332,20 @@ export const appContract = {
       .input(settingsScopeInput.extend({ name: StoredBotSecretName }))
       .output(z.object({ ok: z.literal(true) })),
   },
+  hive: {
+    linkConnection: oc
+      .input(z.object({ botId: Id, connectionId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
+    inspectConversation: oc
+      .input(z.object({ threadId: Id, reason: z.string().trim().min(1).max(500) }))
+      .output(
+        z.object({
+          threadId: Id,
+          expiresAt: z.string(),
+          messages: z.array(z.object({ id: Id, role: z.string(), text: z.string() })),
+        }),
+      ),
+  },
   /** The vault this Space uses, for apps that predate it. The bot only checks access. */
   botSecrets: {
     list: oc.input(z.object({ botId: Id })).output(z.array(BotSecretMetadata)),

@@ -35,6 +35,11 @@ describe("cross-space bot communication", () => {
     },
     { name: "missing bot", bots: [sender], allowed: false },
     {
+      name: "user assignment stays in its space",
+      bots: [{ ...sender, hasUser: true }, recipient],
+      allowed: false,
+    },
+    {
       name: "archived bot",
       bots: [sender, { ...recipient, archivedAt: new Date() }],
       allowed: false,

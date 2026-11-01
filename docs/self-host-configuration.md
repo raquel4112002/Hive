@@ -1,3 +1,5 @@
+<!-- Hive modification: dedicated computer limits. Derived from Rakazo (Apache License 2.0). -->
+
 # Configuration
 
 Rakazo reads its settings from environment variables, normally kept in the `.env` file next to
@@ -42,6 +44,8 @@ SANDBOX_PROVIDER=docker   # or none, e2b, novita, daytona, createos, boat. Keep 
 AGENT_RUNTIME=pi          # Keep scripted only for pnpm test.
 WAKEUP_DRIVER=graphile
 SANDBOX_IDLE_MS=600000    # pause or stop after 10 minutes idle; 0 disables idle sleep
+HIVE_MAX_ACTIVE_COMPUTERS=2 # dedicated Hive computers running at once; blank or invalid uses 2
+HIVE_COMPUTER_IDLE_MINUTES=30 # idle minutes before a dedicated Hive computer stops; blank or invalid uses 30
 # Set 0 when self-hosting with Docker, where an idle computer costs nothing, to keep long-running apps and sessions up.
 # E2B, CreateOS and Boat still apply their own timeouts.
 COMPUTER_MAX_ACTIVE_MS=7200000 # uptime cap for providers that bill while running; minimum 60000; 0 disables

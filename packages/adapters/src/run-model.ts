@@ -12,6 +12,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
 } from "@rakazo/contracts";
 import { MISSING_MODEL_RUN_ERROR } from "@rakazo/core";
+import { hiveModelSource, hiveServiceBot } from "@rakazo/db";
 import { cloudflareProviderEnv } from "./cloudflare-ai-gateway.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
 import type { ExecutorDeps } from "./executor-deps.js";
@@ -502,19 +503,39 @@ export async function resolveRunModel(
     botId?: string;
   },
 ): Promise<AgentRunRequest["model"]> {
-  const override = scope.botId
-    ? await deps.prisma.bot.findFirst({
-        where: {
-          id: scope.botId,
-          userId: scope.userId,
-          spaceId: scope.spaceId,
-        },
-        select: { modelProvider: true, modelId: true, thinkingLevel: true },
-      })
+  const service = scope.botId
+    ? await hiveServiceBot(deps.prisma, scope.botId, scope.spaceId)
     : null;
+  if (
+    service &&
+    hiveModelSource(
+      true,
+      Boolean(
+        (
+          await deps.prisma.deploymentSettings.findUnique({
+            where: { id: "default" },
+            select: { deploymentModelCredentialCipher: true },
+          })
+        )?.deploymentModelCredentialCipher,
+      ),
+    ) === "missing"
+  ) {
+    throw new Error(MISSING_MODEL_RUN_ERROR);
+  }
+  const override =
+    service || !scope.botId
+      ? null
+      : await deps.prisma.bot.findFirst({
+          where: {
+            id: scope.botId,
+            userId: scope.userId,
+            spaceId: scope.spaceId,
+          },
+          select: { modelProvider: true, modelId: true, thinkingLevel: true },
+        });
   const hasOverride = Boolean(override?.modelProvider && override.modelId);
   const [overrideCredential, main, settings] = await Promise.all([
-    hasOverride
+    !service && hasOverride
       ? findConnectedModelCredential(
           deps.prisma,
           deps.secretStore,
@@ -523,7 +544,7 @@ export async function resolveRunModel(
           override!.modelId,
         )
       : Promise.resolve(null),
-    resolveMemberMainModel(deps, scope),
+    service ? Promise.resolve(null) : resolveMemberMainModel(deps, scope),
     deps.prisma.deploymentSettings.findUnique({
       where: { id: "default" },
     }),
@@ -543,6 +564,7 @@ export async function resolveRunModel(
   const { credential, thinkingLevel } = selected;
   let { provider, id } = selected;
   if (!provider || !id) {
+    if (service) throw new Error(MISSING_MODEL_RUN_ERROR);
     const runtimeFallback = runtimeFallbackModel(deps.runtime);
     provider ??= runtimeFallback?.provider;
     id ??= runtimeFallback?.id ?? null;

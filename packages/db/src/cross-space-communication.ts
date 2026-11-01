@@ -12,13 +12,23 @@ export async function crossSpaceCommunicationAllowed(
       spaceId: string;
       crossSpaceCommunication: boolean;
       archivedAt: Date | null;
+      hasUser?: boolean;
     }>
   >`
-    SELECT id, "spaceId", "crossSpaceCommunication", "archivedAt" FROM bots
+    SELECT id, "spaceId", "crossSpaceCommunication", "archivedAt",
+      EXISTS (
+        SELECT 1 FROM bot_assignments a
+        JOIN hive_roles r ON r."userId" = a."userId" AND r.role = 'USER'
+        WHERE a."botId" = bots.id
+      ) AS "hasUser"
+    FROM bots
     WHERE id = ${senderBotId} OR id = ${targetBotId}
     ORDER BY id FOR NO KEY UPDATE
   `;
   if (bots.length !== 2 || bots.some((bot) => bot.archivedAt)) return false;
+  if (bots[0]!.spaceId !== bots[1]!.spaceId && bots.some((bot) => bot.hasUser === true)) {
+    return false;
+  }
   return (
     bots[0]!.spaceId === bots[1]!.spaceId ||
     bots.every((bot) => bot.crossSpaceCommunication === true)
