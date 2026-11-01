@@ -1,3 +1,4 @@
+# Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 msgid ""
 msgstr ""
 "POT-Creation-Date: 2026-08-26 00:00+0000\n"
@@ -2298,8 +2299,8 @@ msgid "Create space"
 msgstr "创建工作区"
 
 #: src/pages/Auth.tsx
-msgid "Create your Rakazo"
-msgstr "创建你的 Rakazo"
+msgid "Create your Hive"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Created"
@@ -3161,8 +3162,8 @@ msgid "How to check"
 msgstr "如何检查"
 
 #: src/components/SignupSurvey.tsx
-msgid "How will you use Rakazo?"
-msgstr "你会如何使用 Rakazo？"
+msgid "How will you use Hive?"
+msgstr ""
 
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
@@ -4955,8 +4956,8 @@ msgstr "返回与 {0} 的通话"
 
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/SlackInstallCallback.tsx
-msgid "Return to Rakazo"
-msgstr "返回 Rakazo"
+msgid "Return to Hive"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
@@ -5391,8 +5392,8 @@ msgid "Sign in at <0>{0}</0>, then paste the code here."
 msgstr "在 <0>{0}</0> 登录，然后将代码粘贴到这里。"
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Rakazo"
-msgstr "登录 Rakazo"
+msgid "Sign in to Hive"
+msgstr ""
 
 #: src/lib/user-error.ts
 msgid "Sign in to your existing account to link SSO"
@@ -6355,8 +6356,8 @@ msgid "Weekends"
 msgstr "周末"
 
 #: src/components/SignupSurvey.tsx
-msgid "Welcome to Rakazo"
-msgstr "欢迎使用 Rakazo"
+msgid "Welcome to Hive"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "What about its memories?"
@@ -6367,8 +6368,8 @@ msgid "What can this space use?"
 msgstr "这个工作区可以使用什么？"
 
 #: src/components/SignupSurvey.tsx
-msgid "What do you most want Rakazo to help with?"
-msgstr "你最希望 Rakazo 帮你做什么？"
+msgid "What do you most want Hive to help with?"
+msgstr ""
 
 #: src/pages/shell/message-cards.tsx
 msgid "What do you want me on first?"

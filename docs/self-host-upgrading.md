@@ -1,3 +1,5 @@
+<!-- Hive modification: image names and Compose project name. Derived from Rakazo (Apache License 2.0). -->
+
 # Upgrading
 
 Move a deployment to a new release, handle one-time migrations, and let the updater sidecar do it
@@ -135,9 +137,9 @@ this repository that is:
 
 | Image | Contents |
 | --- | --- |
-| `ghcr.io/elie222/rakazo/app` | api, worker, web, and sandbox supervisor — one image, multiple commands |
-| `ghcr.io/elie222/rakazo/computer` | Linux desktop used as each bot computer |
-| `ghcr.io/elie222/rakazo/updater` | the updater sidecar, plus the Docker CLI |
+| `hive/app` | api, worker, web, and sandbox supervisor — one image, multiple commands |
+| `hive/computer` | Linux desktop used as each bot computer |
+| `hive/updater` | the updater sidecar, plus the Docker CLI |
 
 `infra/compose/docker-compose.images.yml` is the no-checkout path for those app and computer tags
 plus Postgres. The supervisor runs from the app image on the internal network only (not a separate
@@ -242,7 +244,7 @@ able to resolve the same strings, or it silently creates empty directories where
 Caddyfile should be. Compose makes the effective `-p` value available for interpolation but does
 not automatically put it in a container's environment, so the production file explicitly assigns
 `COMPOSE_PROJECT_NAME` to the updater. A standalone sidecar can instead set
-`RAKAZO_COMPOSE_PROJECT_NAME`; the final fallback is `rakazo-prod`. Without that propagation, a
+`RAKAZO_COMPOSE_PROJECT_NAME`; the final fallback is `hive-prod`. Without that propagation, a
 stack started with `-p something-else` would be left alone while a second project with a new empty
 Postgres volume came up beside it.
 

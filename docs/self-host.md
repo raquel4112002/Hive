@@ -1,4 +1,10 @@
-# Self-hosting Rakazo
+<!-- Hive modification: product name and local image name. Derived from Rakazo (Apache License 2.0). -->
+
+# Self-hosting Hive
+
+Install this checkout with [docs/hive/INSTALL.md](./hive/INSTALL.md). The Compose project is `hive`. Images built here are named `hive/app`, `hive/computer`, and `hive/updater`.
+
+The published-image installer later in this page still downloads the Rakazo files from the upstream repository.
 
 Run the API, worker, web app, database and bot computers on a machine you control.
 
@@ -77,7 +83,7 @@ If the installer, Compose downloads, or image pulls are blocked, use the
 
 On Windows, if an older clone with `core.autocrlf=true` leaves the computer pane hung on boot (`bash\r` in sandbox logs): from a clean worktree, set `git config core.autocrlf false`, run `git add --renormalize . && git checkout -- .`, then rebuild with `pnpm sandbox:build`.
 
-Compose runs Postgres, the sandbox supervisor (Docker socket), API, worker, and a Vite preview of the web app. Bot computers are sibling containers (`rakazo/computer:local`) on separate per-bot networks; only the supervisor and screen proxy join each one. The API process does not get an unrestricted Docker socket; the supervisor owns the lifecycle.
+Compose runs Postgres, the sandbox supervisor (Docker socket), API, worker, and a Vite preview of the web app. Bot computers are sibling containers (`hive/computer:local`) on separate per-bot networks; only the supervisor and screen proxy join each one. The API process does not get an unrestricted Docker socket; the supervisor owns the lifecycle.
 
 Postgres stays on the Compose network only (not published on the host), matching the images
 compose. Credentials come from `.env` (`POSTGRES_PASSWORD` is required). Prefer a URI-safe value

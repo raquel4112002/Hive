@@ -1,3 +1,4 @@
+// Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@rakazo/ui-web";
 import { useEffect, useRef, useState } from "react";
@@ -58,7 +59,7 @@ export function McpOAuthCallbackPage() {
         {error ? <p className="mt-2 max-w-md text-sm text-muted-foreground">{error}</p> : null}
         {showReturn ? (
           <Button type="button" className="mt-5" onClick={() => navigate("/app")}>
-            <Trans>Return to Rakazo</Trans>
+            <Trans>Return to Hive</Trans>
           </Button>
         ) : (
           <p className="mt-2 text-sm text-muted-foreground">

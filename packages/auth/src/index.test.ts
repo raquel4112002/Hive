@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -160,7 +161,7 @@ describe("passwordResetEmail", () => {
 
     expect(message).toMatchObject({
       to: "ada@example.test",
-      subject: "Reset your Rakazo password",
+      subject: "Reset your Hive password",
     });
     expect(message.text).toContain("https://rakazo.test/reset-password?token=secret&next=1");
     expect(message.html).toContain("&lt;Ada &amp; &quot;team&quot;&gt;");
@@ -172,7 +173,7 @@ describe("passwordResetEmail", () => {
 describe("signInCodeEmail", () => {
   it("puts the code in plain text and HTML without links", async () => {
     const message = await signInCodeEmail("ada@example.test", "042517");
-    expect(message).toMatchObject({ to: "ada@example.test", subject: "Your Rakazo sign-in code" });
+    expect(message).toMatchObject({ to: "ada@example.test", subject: "Your Hive sign-in code" });
     expect(message.text).toContain("042517");
     expect(message.html).toContain("042517");
     expect(message.text).not.toMatch(/https?:/);

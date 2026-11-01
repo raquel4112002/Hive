@@ -1,3 +1,6 @@
+# Hive modification: project name and computer image. Derived from Rakazo (Apache License 2.0).
+name: hive
+
 # What the api and worker both read. Each service adds the keys only it reads, so a process
 # only sees what it uses instead of the whole .env. A key with no value is passed through
 # when .env (or the shell) sets it and left unset otherwise. Keep in sync with the code:
@@ -299,7 +302,7 @@ services:
       SUPERVISOR_HOST: "0.0.0.0"
       SUPERVISOR_PORT: "7091"
       DOCKER_SOCKET: /var/run/docker.sock
-      RAKAZO_COMPUTER_IMAGE: rakazo/computer:local
+      RAKAZO_COMPUTER_IMAGE: hive/computer:local
       RAKAZO_COMPUTER_MEMORY: ${RAKAZO_COMPUTER_MEMORY:-2g}
       RAKAZO_COMPUTER_CPUS: ${RAKAZO_COMPUTER_CPUS:-2}
       RAKAZO_COMPUTER_PIDS_LIMIT: ${RAKAZO_COMPUTER_PIDS_LIMIT:-2048}
@@ -327,7 +330,7 @@ services:
         condition: service_completed_successfully
 
   computer:
-    image: rakazo/computer:local
+    image: hive/computer:local
     build:
       context: ../sandboxes/computer
     command: ["true"]

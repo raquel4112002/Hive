@@ -1,3 +1,4 @@
+# Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 msgid ""
 msgstr ""
 "POT-Creation-Date: 2026-08-26 00:00+0000\n"
@@ -2298,8 +2299,8 @@ msgid "Create space"
 msgstr "스페이스 만들기"
 
 #: src/pages/Auth.tsx
-msgid "Create your Rakazo"
-msgstr "Rakazo 계정 만들기"
+msgid "Create your Hive"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Created"
@@ -3161,7 +3162,7 @@ msgid "How to check"
 msgstr "완료 확인 방법"
 
 #: src/components/SignupSurvey.tsx
-msgid "How will you use Rakazo?"
+msgid "How will you use Hive?"
 msgstr ""
 
 #: src/pages/shell/computer-release-actions.tsx
@@ -4955,8 +4956,8 @@ msgstr ""
 
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/SlackInstallCallback.tsx
-msgid "Return to Rakazo"
-msgstr "Rakazo로 돌아가기"
+msgid "Return to Hive"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
@@ -5391,8 +5392,8 @@ msgid "Sign in at <0>{0}</0>, then paste the code here."
 msgstr "<0>{0}</0>에서 로그인한 다음 코드를 여기에 붙여넣으세요."
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Rakazo"
-msgstr "Rakazo 로그인"
+msgid "Sign in to Hive"
+msgstr ""
 
 #: src/lib/user-error.ts
 msgid "Sign in to your existing account to link SSO"
@@ -6355,7 +6356,7 @@ msgid "Weekends"
 msgstr "주말"
 
 #: src/components/SignupSurvey.tsx
-msgid "Welcome to Rakazo"
+msgid "Welcome to Hive"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -6367,7 +6368,7 @@ msgid "What can this space use?"
 msgstr ""
 
 #: src/components/SignupSurvey.tsx
-msgid "What do you most want Rakazo to help with?"
+msgid "What do you most want Hive to help with?"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx

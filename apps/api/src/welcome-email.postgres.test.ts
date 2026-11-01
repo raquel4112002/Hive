@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,7 +37,7 @@ it.skipIf(!databaseUrl)(
         headers: { "content-type": "application/json", origin: webOrigin },
         body: JSON.stringify(body),
       });
-    const welcomes = () => email.sent.filter((message) => message.subject === "Welcome to Rakazo");
+    const welcomes = () => email.sent.filter((message) => message.subject === "Welcome to Hive");
     try {
       expect((await post("/api/auth/sign-up/email", { ...credentials, name: "New" })).status).toBe(
         200,

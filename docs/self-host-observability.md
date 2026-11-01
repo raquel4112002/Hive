@@ -1,3 +1,5 @@
+<!-- Hive modification: Compose project name. Derived from Rakazo (Apache License 2.0). -->
+
 # Logs and monitoring
 
 Collect logs, errors, traces and product analytics, and alert on security events and host
@@ -231,7 +233,7 @@ Monitoring is opt-in. Install `host-alert.py` as `/usr/local/sbin/rakazo-host-al
 and timer and enable `rakazo-host-check.timer`. Checks run every five minutes and report low disk
 space, failed backups, a verified backup older than 36 hours, or missing configured IPv4 SSH rules.
 To also check API and worker containers, set `RAKAZO_MONITOR_COMPOSE_PROJECT` in `backup.env` to
-the Compose project name (`rakazo-prod` for production). The worker probe checks heartbeat and
+the Compose project name (`hive-prod` for production). The worker probe checks heartbeat and
 reconciliation freshness. Leave the variable unset if container monitoring is managed elsewhere.
 
 The dedicated-volume check is enabled only by `RAKAZO_BACKUP_REQUIRE_VOLUME=1` in `backup.env`.

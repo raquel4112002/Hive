@@ -1,3 +1,4 @@
+// Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 import { Trans, useLingui } from "@lingui/react/macro";
 import {
   credentialIssue,
@@ -52,9 +53,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     sent || codeStep ? (
       <Trans>Check your email</Trans>
     ) : mode === "in" ? (
-      <Trans>Sign in to Rakazo</Trans>
+      <Trans>Sign in to Hive</Trans>
     ) : mode === "up" ? (
-      <Trans>Create your Rakazo</Trans>
+      <Trans>Create your Hive</Trans>
     ) : (
       <Trans>Reset your password</Trans>
     );

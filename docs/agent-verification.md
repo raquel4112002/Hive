@@ -1,3 +1,5 @@
+<!-- Hive modification: computer image name. Derived from Rakazo (Apache License 2.0). -->
+
 # Agent verification
 
 Generated JSON reports are preserved locally under ignored `test-report/evals/archive/`, with a second backup outside the disposable worktree. They are not tracked documentation or repository downloads; maintained findings and synthetic fixtures remain in source control. Report references below identify local archived evidence, including every original failed and partial run.
@@ -86,7 +88,7 @@ covered by the separate real-model acceptance test.
 pnpm sandbox:build
 pnpm test:computer-replay
 # Or use an already built image:
-pnpm test:computer-replay --image=rakazo/computer:local
+pnpm test:computer-replay --image=hive/computer:local
 # If Docker has exhausted its automatic address pools, choose an unused subnet:
 pnpm test:computer-replay --subnet=<unused-private-cidr>
 ```
@@ -108,7 +110,7 @@ To capture another successful run manually:
 
 ```bash
 # Requires OPENROUTER_API_KEY; incurs inference usage, with a local Docker sandbox.
-pnpm test:computer-replay --image=rakazo/computer:local \
+pnpm test:computer-replay --image=hive/computer:local \
   --live --record=new-fixture.json
 ```
 

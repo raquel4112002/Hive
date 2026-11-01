@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import { parse } from "dotenv";
 import { describe, expect, it } from "vitest";
 
@@ -268,8 +269,8 @@ describe("compose argv construction", () => {
   });
 
   it("defaults -p to the name pinned in the compose file", () => {
-    expect(DEFAULT_COMPOSE_PROJECT_NAME).toBe("rakazo-prod");
-    expect(composePsArgv(target).args.slice(0, 3)).toEqual(["compose", "-p", "rakazo-prod"]);
+    expect(DEFAULT_COMPOSE_PROJECT_NAME).toBe("hive-prod");
+    expect(composePsArgv(target).args.slice(0, 3)).toEqual(["compose", "-p", "hive-prod"]);
   });
 
   it("refuses a project name that could be parsed as another flag or a second argument", () => {

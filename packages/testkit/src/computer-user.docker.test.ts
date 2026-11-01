@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { ensureScreenCommand } from "@rakazo/core/node/desktop-runtime";
@@ -32,7 +33,7 @@ describe.skipIf(process.env.RUN_COMPUTER_REPLAY_DOCKER !== "1")(
               "/tmp:mode=1777,exec",
               "--tmpfs",
               `/home/rakazo:uid=${uid},gid=${gid},mode=700`,
-              process.env.RAKAZO_COMPUTER_IMAGE ?? "rakazo/computer:local",
+              process.env.RAKAZO_COMPUTER_IMAGE ?? "hive/computer:local",
             ],
             { stdio: "pipe", timeout: 30_000 },
           );

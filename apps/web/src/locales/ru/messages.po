@@ -1,3 +1,4 @@
+# Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 msgid ""
 msgstr ""
 "POT-Creation-Date: 2026-09-07 14:00+0700\n"
@@ -2298,8 +2299,8 @@ msgid "Create space"
 msgstr "Создайте пространство"
 
 #: src/pages/Auth.tsx
-msgid "Create your Rakazo"
-msgstr "Создайте свой Rakazo"
+msgid "Create your Hive"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Created"
@@ -3161,7 +3162,7 @@ msgid "How to check"
 msgstr "Как проверить"
 
 #: src/components/SignupSurvey.tsx
-msgid "How will you use Rakazo?"
+msgid "How will you use Hive?"
 msgstr ""
 
 #: src/pages/shell/computer-release-actions.tsx
@@ -4955,8 +4956,8 @@ msgstr "Вернуться к звонку с {0}"
 
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/SlackInstallCallback.tsx
-msgid "Return to Rakazo"
-msgstr "Вернуться в Rakazo"
+msgid "Return to Hive"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
@@ -5391,8 +5392,8 @@ msgid "Sign in at <0>{0}</0>, then paste the code here."
 msgstr "Войдите на <0>{0}</0>, затем вставьте код сюда."
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Rakazo"
-msgstr "Войти в Rakazo"
+msgid "Sign in to Hive"
+msgstr ""
 
 #: src/lib/user-error.ts
 msgid "Sign in to your existing account to link SSO"
@@ -6355,7 +6356,7 @@ msgid "Weekends"
 msgstr "По выходным"
 
 #: src/components/SignupSurvey.tsx
-msgid "Welcome to Rakazo"
+msgid "Welcome to Hive"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -6367,7 +6368,7 @@ msgid "What can this space use?"
 msgstr ""
 
 #: src/components/SignupSurvey.tsx
-msgid "What do you most want Rakazo to help with?"
+msgid "What do you most want Hive to help with?"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx

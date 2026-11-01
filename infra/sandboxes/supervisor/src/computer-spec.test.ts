@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -75,8 +76,8 @@ describe("graphical computer spec", () => {
 
   it("resolves the computer image tag outside Compose", () => {
     // Explicit "" stands for unset, so exported RAKAZO_COMPUTER_IMAGE* values cannot leak in.
-    expect(resolveComputerImage("", "")).toBe("rakazo/computer:local");
-    expect(resolveComputerImage("", "edge")).toBe("rakazo/computer:local");
+    expect(resolveComputerImage("", "")).toBe("hive/computer:local");
+    expect(resolveComputerImage("", "edge")).toBe("hive/computer:local");
     expect(resolveComputerImage("ghcr.io/elie222/rakazo/computer", "edge")).toBe(
       "ghcr.io/elie222/rakazo/computer:edge",
     );
@@ -116,7 +117,7 @@ describe("graphical computer spec", () => {
       homePath: "/var/rakazo/homes/abc",
       networkMode: "rakazo_default",
     });
-    expect(options.Image).toBe("rakazo/computer:local");
+    expect(options.Image).toBe("hive/computer:local");
     expect(options.Image).not.toMatch(/alpine/);
     expect(options).not.toHaveProperty("Entrypoint");
     expect(JSON.stringify(options)).not.toMatch(/sleep/);

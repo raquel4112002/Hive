@@ -1,3 +1,4 @@
+// Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 import { fileURLToPath } from "node:url";
 import { isBuildId } from "@rakazo/contracts/client-build";
 import { webDarkTokens } from "@rakazo/ui-tokens";
@@ -17,8 +18,8 @@ export function webManifest() {
   }));
   return {
     id: "/",
-    name: "Rakazo",
-    short_name: "Rakazo",
+    name: "Hive",
+    short_name: "Hive",
     description: "Your team of always-on agents.",
     start_url: "/",
     scope: "/",

@@ -1,3 +1,4 @@
+// Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 import { Trans } from "@lingui/react/macro";
 import { Link, useNavigate } from "react-router-dom";
 import { WindowChrome } from "./WindowChrome";
@@ -16,7 +17,7 @@ export function WelcomePage() {
             <span className="h-[17px] w-2 rounded-full bg-card sm:h-6 sm:w-[11px]" />
           </div>
           <h1 className="text-[56px] leading-none tracking-[-0.03em] text-foreground sm:text-[76px]">
-            Rakazo
+            Hive
           </h1>
         </div>
         <p className="max-w-[600px] text-center text-[27px] leading-[1.4] text-foreground/75">

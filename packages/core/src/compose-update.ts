@@ -6,19 +6,13 @@ import {
 } from "./self-update.js";
 
 /**
- * The GitHub repository whose CI fills the image namespace. `publish-server-image.yml` pushes to
- * `ghcr.io/${{ github.repository }}`, so the namespace always belongs to whichever repository ran
- * the workflow. Naming a different owner here points the deployment at packages nobody publishes.
- *
- * `OFFICIAL_REPO_URL` names the same repository, so the source commit selected from a release is
- * guaranteed to have been eligible for this repository's publishing workflow.
+ * Hive modification: image names. Derived from Rakazo (Apache License 2.0).
+ * Local names until a registry is set with RAKAZO_IMAGE and RAKAZO_UPDATER_IMAGE.
+ * One image runs api, worker, and web.
  */
-export const PUBLISHED_IMAGE_REPO = "elie222/rakazo";
-
-/** The published server image. One image runs api, worker, and web. */
-export const OFFICIAL_SERVER_IMAGE = `ghcr.io/${PUBLISHED_IMAGE_REPO}/app`;
-/** The updater sidecar's image, published alongside the server image but tagged independently. */
-export const OFFICIAL_UPDATER_IMAGE = `ghcr.io/${PUBLISHED_IMAGE_REPO}/updater`;
+export const OFFICIAL_SERVER_IMAGE = "hive/app";
+/** The updater sidecar's image, tagged independently of the server image. */
+export const OFFICIAL_UPDATER_IMAGE = "hive/updater";
 
 /**
  * The tag a deployment that has never run an update is on. It is deliberately *not* `latest`: no
@@ -34,7 +28,7 @@ export const PREVIOUS_IMAGE_TAG_ENV = "RAKAZO_IMAGE_TAG_PREVIOUS";
  * Matches the `name:` pinned in `infra/compose/docker-compose.prod.yml`. Used when Compose has not
  * injected `COMPOSE_PROJECT_NAME` (it does, into running services) and no dedicated override is set.
  */
-export const DEFAULT_COMPOSE_PROJECT_NAME = "rakazo-prod";
+export const DEFAULT_COMPOSE_PROJECT_NAME = "hive-prod";
 export const COMPOSE_PROJECT_NAME_ENV = "COMPOSE_PROJECT_NAME";
 export const COMPOSE_PROJECT_NAME_OVERRIDE_ENV = "RAKAZO_COMPOSE_PROJECT_NAME";
 

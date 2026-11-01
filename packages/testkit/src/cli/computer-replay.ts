@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -26,9 +27,9 @@ async function main() {
     );
   if (unknown.length)
     throw new Error(
-      "Usage: computer-replay.ts [--image=rakazo/computer:local] [--subnet=unused-private-CIDR] [--live --record=new-fixture.json]",
+      "Usage: computer-replay.ts [--image=hive/computer:local] [--subnet=unused-private-CIDR] [--live --record=new-fixture.json]",
     );
-  const image = imageArg?.slice("--image=".length) || "rakazo/computer:local";
+  const image = imageArg?.slice("--image=".length) || "hive/computer:local";
   let captureKey: string | undefined;
   if (live) {
     loadRootEnv();

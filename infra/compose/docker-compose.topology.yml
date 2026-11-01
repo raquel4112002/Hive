@@ -1,3 +1,4 @@
+# Hive modification: image names. Derived from Rakazo (Apache License 2.0).
 services:
   postgres:
     image: postgres:18-alpine
@@ -14,14 +15,14 @@ services:
       retries: 30
 
   computer-image:
-    image: ${TOPOLOGY_COMPUTER_IMAGE:-rakazo/computer:topology}
+    image: ${TOPOLOGY_COMPUTER_IMAGE:-hive/computer:topology}
     build:
       context: ../sandboxes/computer
     command: ["true"]
     restart: "no"
 
   app-image:
-    image: ${TOPOLOGY_APP_IMAGE:-rakazo/app:topology}
+    image: ${TOPOLOGY_APP_IMAGE:-hive/app:topology}
     build:
       context: ../..
       dockerfile: infra/compose/Dockerfile.topology
@@ -29,7 +30,7 @@ services:
     restart: "no"
 
   supervisor:
-    image: ${TOPOLOGY_APP_IMAGE:-rakazo/app:topology}
+    image: ${TOPOLOGY_APP_IMAGE:-hive/app:topology}
     command: ["pnpm", "--filter", "@rakazo/sandbox-supervisor", "start"]
     user: root
     environment:
@@ -40,7 +41,7 @@ services:
       SUPERVISOR_PORT: "7091"
       SANDBOX_SUPERVISOR_TOKEN: topology-only-supervisor-token-at-least-32-characters
       DOCKER_SOCKET: /var/run/docker.sock
-      RAKAZO_COMPUTER_IMAGE: ${TOPOLOGY_COMPUTER_IMAGE:-rakazo/computer:topology}
+      RAKAZO_COMPUTER_IMAGE: ${TOPOLOGY_COMPUTER_IMAGE:-hive/computer:topology}
       RAKAZO_COMPUTER_MEMORY: ${RAKAZO_COMPUTER_MEMORY:-2g}
       RAKAZO_COMPUTER_CPUS: ${RAKAZO_COMPUTER_CPUS:-2}
       RAKAZO_COMPUTER_PIDS_LIMIT: ${RAKAZO_COMPUTER_PIDS_LIMIT:-2048}
@@ -69,7 +70,7 @@ services:
       retries: 30
 
   api:
-    image: ${TOPOLOGY_APP_IMAGE:-rakazo/app:topology}
+    image: ${TOPOLOGY_APP_IMAGE:-hive/app:topology}
     # Node runs directly, not through pnpm: pnpm does not pass SIGTERM on, so a stop would kill the
     # process before its graceful shutdown finishes in-flight requests and jobs.
     working_dir: /app/apps/api
@@ -143,7 +144,7 @@ services:
       retries: 45
 
   web:
-    image: ${TOPOLOGY_APP_IMAGE:-rakazo/app:topology}
+    image: ${TOPOLOGY_APP_IMAGE:-hive/app:topology}
     # Directly, not through pnpm, so a stop reaches it (see the api command).
     working_dir: /app/apps/web
     command: ["node_modules/.bin/vite", "preview", "--host", "0.0.0.0", "--port", "5173"]
@@ -166,7 +167,7 @@ services:
       retries: 30
 
   worker:
-    image: ${TOPOLOGY_APP_IMAGE:-rakazo/app:topology}
+    image: ${TOPOLOGY_APP_IMAGE:-hive/app:topology}
     # Directly, not through pnpm, so a stop reaches it (see the api command).
     working_dir: /app/apps/worker
     command: ["node", "--enable-source-maps", "dist/index.js"]

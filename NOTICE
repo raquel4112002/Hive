@@ -1,0 +1,17 @@
+Hive
+Copyright 2026 Hive contributors
+
+This product is derived from Rakazo.
+
+Rakazo is licensed under the Apache License, Version 2.0.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+The original copyright notice is retained in the LICENSE file:
+
+    Copyright 2026 Rakazo contributors
+
+Files changed for Hive carry a notice that they were modified.
+The package names, the database role rakazo_app, and the RAKAZO_*
+environment variable names are unchanged in this version.

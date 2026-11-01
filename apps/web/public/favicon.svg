@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Hive modification: provisional mark. Derived from Rakazo (Apache License 2.0). -->
+  <rect width="32" height="32" rx="8" fill="#000"/>
+  <path fill="#fff" d="M9 7h4v6h6V7h4v18h-4v-8H13v8H9V7z"/>
+</svg>

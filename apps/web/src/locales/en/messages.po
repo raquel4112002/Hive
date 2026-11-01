@@ -1,3 +1,4 @@
+# Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 msgid ""
 msgstr ""
 "POT-Creation-Date: 2026-08-26 00:00+0000\n"
@@ -2298,8 +2299,8 @@ msgid "Create space"
 msgstr "Create space"
 
 #: src/pages/Auth.tsx
-msgid "Create your Rakazo"
-msgstr "Create your Rakazo"
+msgid "Create your Hive"
+msgstr "Create your Hive"
 
 #: src/components/AskCard.tsx
 msgid "Created"
@@ -3161,8 +3162,8 @@ msgid "How to check"
 msgstr "How to check"
 
 #: src/components/SignupSurvey.tsx
-msgid "How will you use Rakazo?"
-msgstr "How will you use Rakazo?"
+msgid "How will you use Hive?"
+msgstr "How will you use Hive?"
 
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
@@ -4955,8 +4956,8 @@ msgstr "Return to call with {0}"
 
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/SlackInstallCallback.tsx
-msgid "Return to Rakazo"
-msgstr "Return to Rakazo"
+msgid "Return to Hive"
+msgstr "Return to Hive"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
@@ -5391,8 +5392,8 @@ msgid "Sign in at <0>{0}</0>, then paste the code here."
 msgstr "Sign in at <0>{0}</0>, then paste the code here."
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Rakazo"
-msgstr "Sign in to Rakazo"
+msgid "Sign in to Hive"
+msgstr "Sign in to Hive"
 
 #: src/lib/user-error.ts
 msgid "Sign in to your existing account to link SSO"
@@ -6355,8 +6356,8 @@ msgid "Weekends"
 msgstr "Weekends"
 
 #: src/components/SignupSurvey.tsx
-msgid "Welcome to Rakazo"
-msgstr "Welcome to Rakazo"
+msgid "Welcome to Hive"
+msgstr "Welcome to Hive"
 
 #: src/pages/shell/dialogs.tsx
 msgid "What about its memories?"
@@ -6367,8 +6368,8 @@ msgid "What can this space use?"
 msgstr "What can this space use?"
 
 #: src/components/SignupSurvey.tsx
-msgid "What do you most want Rakazo to help with?"
-msgstr "What do you most want Rakazo to help with?"
+msgid "What do you most want Hive to help with?"
+msgstr "What do you most want Hive to help with?"
 
 #: src/pages/shell/message-cards.tsx
 msgid "What do you want me on first?"

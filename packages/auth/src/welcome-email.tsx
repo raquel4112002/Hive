@@ -1,3 +1,4 @@
+// Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 /** @jsxRuntime automatic */
 import type { TransactionalEmail } from "@rakazo/adapter-kit";
 import { ANDROID_APK_URL, IOS_APP_STORE_URL } from "@rakazo/contracts";
@@ -19,12 +20,12 @@ export function welcomeEmail(
 ): Promise<TransactionalEmail> {
   return message(
     user.email,
-    "Welcome to Rakazo",
+    "Welcome to Hive",
     <>
       <Text>Hi {displayName(user.name, "there")},</Text>
-      <Text>Thanks for signing up for Rakazo.</Text>
+      <Text>Thanks for signing up for Hive.</Text>
       <Text>
-        Rakazo also has apps for{" "}
+        Hive also has apps for{" "}
         {APPS.map(([name, href], index) => (
           <span key={name}>
             {index === APPS.length - 1 ? "and " : ""}
@@ -43,7 +44,7 @@ export function welcomeEmail(
         .
       </Text>
       <Text>
-        Rakazo is open source. If you like it,{" "}
+        Hive is open source. If you like it,{" "}
         <Link href="https://github.com/elie222/rakazo" style={linkStyle}>
           a star on GitHub
         </Link>{" "}
@@ -55,7 +56,7 @@ export function welcomeEmail(
           href="https://github.com/elie222/rakazo/blob/main/docs/self-host.md"
           style={linkStyle}
         >
-          Self-host Rakazo
+          Self-host Hive
         </Link>
         .
       </Text>

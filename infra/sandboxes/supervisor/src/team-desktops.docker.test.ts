@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -79,7 +80,7 @@ it.skipIf(process.env.VERIFY_DOCKER_TEAM_SCREENS !== "1").each([false, true])(
         "--network",
         "none",
         "--shm-size=512m",
-        process.env.RAKAZO_COMPUTER_IMAGE ?? "rakazo/computer:local",
+        process.env.RAKAZO_COMPUTER_IMAGE ?? "hive/computer:local",
       );
       docker("cp", commandFile, `${name}:/tmp/team-desktops-commands.json`);
       docker(

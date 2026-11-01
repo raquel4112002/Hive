@@ -1,3 +1,5 @@
+<!-- Hive modification: Compose project name. Derived from Rakazo (Apache License 2.0). -->
+
 # Backup and restore
 
 Back up the database and application data, keep encrypted copies off the server, and recover to
@@ -153,7 +155,7 @@ snapshot and volume names first. `VOLUME` must name the volume the API currently
 set -euo pipefail
 umask 077
 COMPOSE="sudo docker compose --env-file .env -f infra/compose/docker-compose.prod.yml"
-VOLUME=rakazo-prod_appdata
+VOLUME=hive-prod_appdata
 
 ssh deploy@app.example.com "cd /srv/rakazo && $COMPOSE stop api worker web"
 ROLLBACK_DUMP="$(mktemp "$PWD/before-restore.dump.XXXXXX")"
@@ -293,7 +295,7 @@ unless it names a zone:
 COMPOSE="sudo docker compose --env-file .env -f infra/compose/docker-compose.prod.yml"
 ssh deploy@app.example.com "cd /srv/rakazo && $COMPOSE stop api worker web pitr postgres"
 ssh deploy@app.example.com \
-  "cd /srv/rakazo && sudo infra/compose/pitr.sh restore '2026-01-31 09:41:00+00' rakazo-prod_postgres" \
+  "cd /srv/rakazo && sudo infra/compose/pitr.sh restore '2026-01-31 09:41:00+00' hive-prod_postgres" \
   < rakazo-backup.key
 ssh deploy@app.example.com "cd /srv/rakazo && $COMPOSE up -d --wait"
 ```

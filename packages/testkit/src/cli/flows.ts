@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -68,7 +69,7 @@ async function main() {
       SANDBOX_PROVIDER: sandbox.provider,
       ...(sandbox.provider === "docker"
         ? {
-            RAKAZO_COMPUTER_IMAGE: process.env.RAKAZO_COMPUTER_IMAGE || "rakazo/computer:local",
+            RAKAZO_COMPUTER_IMAGE: process.env.RAKAZO_COMPUTER_IMAGE || "hive/computer:local",
             SANDBOX_CONTROL_VIA_LOOPBACK: "true",
             SANDBOX_SCREEN_NETWORK: "published",
             SANDBOX_SCREEN_HOST: "127.0.0.1",

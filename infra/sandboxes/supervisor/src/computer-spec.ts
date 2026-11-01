@@ -18,7 +18,8 @@ export function resolveComputerImage(
   tag = process.env.RAKAZO_COMPUTER_IMAGE_TAG,
 ): string {
   const name = image?.trim();
-  if (!name) return "rakazo/computer:local";
+  // Hive modification: local image name. Derived from Rakazo (Apache License 2.0).
+  if (!name) return "hive/computer:local";
   const wantedTag = tag?.trim();
   const lastSegment = name.slice(name.lastIndexOf("/") + 1);
   if (!wantedTag || name.includes("@") || lastSegment.includes(":")) return name;

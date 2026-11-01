@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { signupRequiresEmailVerification } from "@rakazo/core";
@@ -91,7 +92,7 @@ export async function signupThroughForm(
   testInfo?: TestInfo,
 ) {
   await page.goto("/sign-up");
-  await expect(page.getByRole("heading", { name: "Create your Rakazo" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your Hive" })).toBeVisible();
   if (testInfo) await captureScreenshot(page, testInfo, "01-sign-up");
   await page.getByPlaceholder("Your name").fill(name);
   await page.getByPlaceholder("Your email address").fill(email);

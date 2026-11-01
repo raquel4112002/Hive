@@ -1,3 +1,4 @@
+// Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 import { Trans } from "@lingui/react/macro";
 import { Button } from "@rakazo/ui-web";
 import { useEffect, useRef, useState } from "react";
@@ -32,7 +33,7 @@ export function SlackInstallCallbackPage() {
           <Trans>Could not connect</Trans>
         </div>
         <Button type="button" className="mt-5" onClick={() => navigate("/app?settings=messaging")}>
-          <Trans>Return to Rakazo</Trans>
+          <Trans>Return to Hive</Trans>
         </Button>
       </div>
     </div>

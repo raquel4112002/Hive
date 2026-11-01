@@ -155,7 +155,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
   let authContext: Promise<{ secretConfig: TokenKey }> | undefined;
   const tokenKey = async () => (await authContext!).secretConfig;
   const auth = betterAuth({
-    appName: "Rakazo",
+    appName: "Hive",
     logger: env.logger,
     secret: env.secret,
     baseURL: env.baseURL,
@@ -307,7 +307,8 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         ? [
             passkey({
               rpID: relyingParty.rpID,
-              rpName: "Rakazo",
+              // Hive modification: name shown in the passkey prompt. Derived from Rakazo (Apache License 2.0).
+              rpName: "Hive",
               origin: relyingParty.origins,
             }) as BetterAuthPlugin,
           ]

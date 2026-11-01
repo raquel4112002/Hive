@@ -1,3 +1,4 @@
+// Hive modification: visible product name or image name. Derived from Rakazo (Apache License 2.0).
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -115,8 +116,8 @@ describe("the updater compose service", () => {
   });
 
   it("uses the official registry namespace and digest-pins third-party runtime images", () => {
-    expect(updater.image).toContain("ghcr.io/elie222/rakazo/updater");
-    expect(compose.services.api?.image).toContain("ghcr.io/elie222/rakazo/app");
+    expect(updater.image).toContain("hive/updater");
+    expect(compose.services.api?.image).toContain("hive/app");
     expect(compose.services.postgres?.image).toMatch(
       /^\$\{POSTGRES_IMAGE:-postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6\}$/,
     );
@@ -143,7 +144,7 @@ describe("the updater compose service", () => {
 
   it("injects the actual Compose project name into the updater container", () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: this is the literal Compose expression
-    expect(updater.environment?.COMPOSE_PROJECT_NAME).toBe("${COMPOSE_PROJECT_NAME:-rakazo-prod}");
+    expect(updater.environment?.COMPOSE_PROJECT_NAME).toBe("${COMPOSE_PROJECT_NAME:-hive-prod}");
   });
 
   it("does not load the application env_file into the root-equivalent process", () => {
