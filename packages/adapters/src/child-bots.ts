@@ -21,6 +21,8 @@ import {
   computerScopeKey,
   createRepos,
   createThreadMessageInTransaction,
+  ownerThread,
+  ownerThreadArgs,
   expireComputerExecutionLeases,
   legacyTeamHomeKey,
   recordComputerRunEnd,
@@ -106,15 +108,16 @@ export async function spawnBot(
           spawnKey: input.spawnKey,
         },
       },
-      include: { thread: true },
+      include: { threads: ownerThreadArgs },
     });
     if (!existing) throw error;
-    if (!existing.thread) throw new Error(`Spawned bot ${existing.id} is missing its thread`);
+    const existingThread = ownerThread(existing);
+    if (!existingThread) throw new Error(`Spawned bot ${existing.id} is missing its thread`);
     duplicate = true;
     created = {
       id: existing.id,
       name: existing.name,
-      threadId: existing.thread.id,
+      threadId: existingThread.id,
     };
   }
 

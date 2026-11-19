@@ -17,23 +17,20 @@ function fixture() {
     userId: actor.userId,
     spaceId: actor.spaceId,
     archivedAt: new Date(),
-    thread: { id: "thread-1" },
+    thread: { id: "thread-1", userId: actor.userId },
     computer: null,
   };
-  const findBot = vi.fn(
-    async ({
-      where,
-    }: {
-      where: { id: string; userId: string; spaceId: string; archivedAt?: null };
-    }) => {
-      return where.id === bot.id &&
-        where.userId === bot.userId &&
-        where.spaceId === bot.spaceId &&
-        where.archivedAt === undefined
-        ? bot
-        : null;
-    },
-  );
+  const findBot = vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+    const flat = Array.isArray(where.AND)
+      ? Object.assign({}, ...(where.AND as Array<Record<string, unknown>>))
+      : where;
+    return flat.id === bot.id &&
+      flat.userId === bot.userId &&
+      flat.spaceId === bot.spaceId &&
+      flat.archivedAt === undefined
+      ? bot
+      : null;
+  });
   const findMessages = vi.fn(async () => [
     {
       id: "message-1",
@@ -87,9 +84,7 @@ describe("archived thread read authorization", () => {
       const result = await call(proc, { botId: "bot-1" });
       expect(result.status).toBe(200);
       expect(result.body.json.messages).toEqual([expect.objectContaining({ id: "message-1" })]);
-      expect(findBot).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "bot-1", userId: "user-1", spaceId: "space-1" } }),
-      );
+      expect(findBot).toHaveBeenCalled();
     },
   );
   it.each(["threads/get", "threads/messages"])(
@@ -123,8 +118,8 @@ describe("archived thread read authorization", () => {
   ])("%s still rejects an archived bot", async (proc, input) => {
     const { call, findBot } = fixture();
     expect((await call(proc as string, input)).status).toBe(500);
-    expect(findBot).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ archivedAt: null }) }),
-    );
+    const where = findBot.mock.calls.at(-1)?.[0].where as { AND?: Array<Record<string, unknown>> };
+    const flat = where.AND ? Object.assign({}, ...where.AND) : where;
+    expect(flat.archivedAt).toBe(null);
   });
 });

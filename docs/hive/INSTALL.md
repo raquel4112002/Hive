@@ -19,4 +19,19 @@ docker compose --env-file .env -f infra/compose/docker-compose.yml up --build
 
 `RAKAZO_IMAGE` in `.env` names `hive/app`. The checkout Compose file builds the app services itself. Set `RAKAZO_IMAGE` to a registry path only when you pull images instead of building them. The variable names stay `RAKAZO_*`.
 
+## Model
+
+Hive uses one OpenAI-compatible endpoint for the installation. Set all three, or none. A bot can name its own model later; until it has its own key it uses this one. To move to LiteLLM, change these three values and recreate the API and worker. Nothing in the code names a host, a key, or a model.
+
+On Docker Desktop the containers reach Ollama on the Windows host through `host.docker.internal`. `ollama list` shows the model id. Ollama does not check the key; the client still sends one.
+
+```env
+HIVE_MODEL_BASE_URL=http://host.docker.internal:11434/v1
+HIVE_MODEL_API_KEY=ollama
+HIVE_DEFAULT_MODEL=qwen3.5:2b
+MCP_ALLOW_PRIVATE_ENDPOINT=true
+```
+
+`MCP_ALLOW_PRIVATE_ENDPOINT=true` lets the API and worker call that private address. Recreate the API and worker after changing `.env`.
+
 More detail on secrets, models, and production TLS is in [docs/self-host.md](../self-host.md) and [docs/self-host-secrets.md](../self-host-secrets.md).

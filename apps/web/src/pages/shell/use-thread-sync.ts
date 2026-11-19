@@ -80,6 +80,7 @@ export function useThreadSync({
   notifyBrowserForEvent,
   markBotReadIfVisible,
   markGroupReadOnReply,
+  skipBotConversation = false,
 }: {
   rpc: ReturnType<typeof createSpaceRpc>;
   queries: SpaceQueries;
@@ -98,6 +99,8 @@ export function useThreadSync({
   notifyBrowserForEvent: ReturnType<typeof useBrowserNotifications>["notifyBrowserForEvent"];
   markBotReadIfVisible: (botId: string) => void;
   markGroupReadOnReply: (groupId: string) => void;
+  /** Hive managers configure bots. Their conversation belongs to each person. */
+  skipBotConversation?: boolean;
 }) {
   const {
     snapshot,
@@ -299,6 +302,11 @@ export function useThreadSync({
 
   useEffect(() => {
     if (!active) return;
+    if (
+      !inGroup &&
+      (active.publication || active.accessLevel === "READ_ONLY" || skipBotConversation)
+    )
+      return;
     const pendingJump = searchParamsRef.current.get("m");
     if (!pendingJump) {
       pinnedAroundRef.current = null;
@@ -401,7 +409,15 @@ export function useThreadSync({
       const left = snapshotRef.current;
       if (left?.botId === active.id && !left.groupId) queryClient.setQueryData(threadKey, left);
     };
-  }, [active?.id, markBotReadIfVisible, notifyBrowserForEvent]);
+  }, [
+    active?.id,
+    active?.publication,
+    active?.accessLevel,
+    skipBotConversation,
+    inGroup,
+    markBotReadIfVisible,
+    notifyBrowserForEvent,
+  ]);
 
   useEffect(() => {
     if (!groupId || !activeGroup) return;

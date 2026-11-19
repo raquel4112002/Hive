@@ -177,7 +177,7 @@ describeWithDatabase("structured @ mention targets", () => {
       const [first] = concurrent;
       expect(first?.routineRunIds).toHaveLength(2);
       for (const receipt of [...concurrent, retried]) expect(receipt).toEqual(first);
-      const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+      const thread = await prisma.thread.findFirstOrThrow({ where: { botId: bot.id, routineId: null } });
       expect(await prisma.message.count({ where: { threadId: thread.id, clientNonce } })).toBe(1);
       expect(await prisma.run.count({ where: { routineId: digest.id } })).toBe(1);
       expect(await prisma.run.count({ where: { routineId: review.id } })).toBe(1);
@@ -250,7 +250,7 @@ describeWithDatabase("structured @ mention targets", () => {
           notify: false,
           active: false,
         });
-        const slowThread = await prisma.thread.findUniqueOrThrow({ where: { botId: slow.id } });
+        const slowThread = await prisma.thread.findFirstOrThrow({ where: { botId: slow.id, routineId: null } });
         const clientNonce = `send-race-${name}-${stamp}`;
         // Holding the slow bot's thread stops B on its first run insert, after its saved-run lookup.
         let release!: () => void;
@@ -306,7 +306,7 @@ describeWithDatabase("structured @ mention targets", () => {
     it("rolls back the message and every run when the last step fails", async () => {
       const { cookie, bot, digest, review } = await owner("Rollback");
       const clientNonce = `send-rollback-${stamp}`;
-      const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+      const thread = await prisma.thread.findFirstOrThrow({ where: { botId: bot.id, routineId: null } });
       // An event already holds the next sequence number, so appending the message's event, the
       // send's last write, fails after the message and the runs were inserted.
       await prisma.event.create({
@@ -353,7 +353,7 @@ describeWithDatabase("structured @ mention targets", () => {
       });
 
       expect(response.status).toBeGreaterThanOrEqual(400);
-      const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: caller.bot.id } });
+      const thread = await prisma.thread.findFirstOrThrow({ where: { botId: caller.bot.id, routineId: null } });
       expect(await prisma.message.count({ where: { threadId: thread.id, clientNonce } })).toBe(0);
       expect(
         await prisma.run.count({

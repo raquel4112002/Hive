@@ -7,6 +7,8 @@ import {
   createDb,
   createPendingSteeringRun,
   createThreadMessage,
+  ownerThread,
+  ownerThreadArgs,
   provisionMessagingIdentity,
   runAsSystem,
   runAsTenant,
@@ -66,12 +68,12 @@ describe.skipIf(!enabled)("typed replies to waiting cards (PostgreSQL)", () => {
         userId: actor.userId,
         name: "Beta",
         color: "primary",
-        thread: { create: { spaceId: actor.spaceId, userId: actor.userId } },
+        threads: { create: { spaceId: actor.spaceId, userId: actor.userId } },
       },
-      include: { thread: true },
+      include: { threads: ownerThreadArgs },
     });
     peerBotId = peer.id;
-    peerThreadId = peer.thread!.id;
+    peerThreadId = ownerThread(peer)!.id;
     const group = await system.chatGroup.create({
       data: {
         spaceId: actor.spaceId,

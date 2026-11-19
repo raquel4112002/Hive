@@ -18,6 +18,8 @@ import { QUEUE_HOLDING_RUN_STATUSES, withAbort } from "@rakazo/core";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
   appendEventInTransaction,
+  ownerThread,
+  ownerThreadArgs,
   clearEndedExecutionRunBinding,
   createGroupRepos,
   createThreadMessageInTransaction,
@@ -776,13 +778,14 @@ async function announceSuspended(
 ): Promise<void> {
   const bots = await deps.prisma.bot.findMany({
     where: { computerId: computer.id },
-    select: { id: true, thread: { select: { id: true } } },
+    select: { id: true, threads: { ...ownerThreadArgs, select: { id: true } } },
   });
   for (const bot of bots) {
-    if (!bot.thread) continue;
+    const thread = ownerThread(bot);
+    if (!thread) continue;
     await deps.events.append({
       spaceId: computer.spaceId,
-      threadId: bot.thread.id,
+      threadId: thread.id,
       botId: bot.id,
       type: "computer.status",
       payload: { status: "suspended" },
@@ -816,11 +819,12 @@ async function postComputerNote(
   const blocks = [{ kind: "meta" as const, text }];
   const bots = await deps.prisma.bot.findMany({
     where: { computerId: computer.id },
-    select: { id: true, thread: { select: { id: true } } },
+    select: { id: true, threads: { ...ownerThreadArgs, select: { id: true } } },
   });
   for (const bot of bots) {
-    if (!bot.thread) continue;
-    const threadId = bot.thread.id;
+    const thread = ownerThread(bot);
+    if (!thread) continue;
+    const threadId = thread.id;
     try {
       const seq = await deps.prisma.$transaction(async (tx) => {
         const existing = await tx.message.findUnique({

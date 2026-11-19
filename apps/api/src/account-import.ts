@@ -30,6 +30,8 @@ import {
   createSpaceForMember,
   InvalidSpaceNameError,
   Prisma,
+  ownerThread,
+  ownerThreadArgs,
   parseComputerMode,
   personalOrganizationIds,
   runAsSystem,
@@ -769,13 +771,15 @@ class AccountImporter implements ArchiveSink {
         });
       },
     });
-    const { computer, thread } = await this.deps.prisma.bot.findUniqueOrThrow({
+    const loaded = await this.deps.prisma.bot.findUniqueOrThrow({
       where: { id: bot.id },
       select: {
         computer: { select: { homeKey: true, scope: true } },
-        thread: { select: { id: true } },
+        threads: { ...ownerThreadArgs, select: { id: true } },
       },
     });
+    const { computer } = loaded;
+    const thread = ownerThread(loaded);
     if (!computer || !thread) throw new Error("Imported bot is missing its computer or thread");
     space.ids.set(record.id, bot.id);
     space.bots.set(record.id, {

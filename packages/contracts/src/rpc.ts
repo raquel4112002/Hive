@@ -1345,6 +1345,34 @@ export const appContract = {
           messages: z.array(z.object({ id: Id, role: z.string(), text: z.string() })),
         }),
       ),
+    assignDepartment: oc
+      .input(
+        z.object({
+          botId: Id,
+          departmentId: Id.optional(),
+          everyone: z.boolean().optional(),
+          accessLevel: z.enum(["CHAT", "READ_ONLY"]).default("CHAT"),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+    setPublication: oc
+      .input(z.object({ botId: Id, publication: z.boolean() }))
+      .output(z.object({ ok: z.literal(true) })),
+  },
+  posts: {
+    list: oc.input(z.object({ botId: Id })).output(
+      z.array(
+        z.object({
+          id: Id,
+          content: z.string(),
+          createdAt: z.string(),
+          artifacts: z.array(z.object({ id: Id, name: z.string() })),
+        }),
+      ),
+    ),
+    artifact: oc
+      .input(z.object({ artifactId: Id }))
+      .output(z.object({ name: z.string(), body: z.string() })),
   },
   /** The vault this Space uses, for apps that predate it. The bot only checks access. */
   botSecrets: {

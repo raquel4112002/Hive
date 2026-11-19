@@ -112,6 +112,10 @@ export const BotSchema = z.object({
   teamChatRules: z.string(),
   crossSpaceCommunication: z.boolean().optional(),
   fleetManagement: z.boolean().default(false),
+  /** Hive: shared feed, no user conversation. Absent from older servers. */
+  publication: z.boolean().optional(),
+  /** Hive: CHAT opens a thread. READ_ONLY sees the feed. Absent from older servers. */
+  accessLevel: z.enum(["CHAT", "READ_ONLY"]).nullable().optional(),
   disabledBuiltinTools: z.array(z.string()).default([]),
   webhookConfigured: z.boolean(),
   /** Present when created with an idempotency key (e.g. onboarding:first). */
@@ -508,7 +512,7 @@ export const CreateRoutineInput = z
     prompt: z.string().min(1),
     crons: z.array(z.string().min(1)).default([]),
     timezone: TimeZoneSchema.default("UTC"),
-    notify: z.boolean().default(true),
+    notify: z.boolean().optional(),
     active: z.boolean().default(false),
     webhookEnabled: z.boolean().default(false),
     githubEnabled: z.boolean().default(false),
@@ -1776,6 +1780,8 @@ export const MeSchema = z.object({
   billingEnabled: z.boolean(),
   /** True until a user of a billing deployment answers or skips the signup survey. Absent from older servers. */
   needsSignupSurvey: z.boolean().optional(),
+  /** Hive role in the active space's organization. Absent when this install has no Hive roles. */
+  hiveRole: z.enum(["SUPER_ADMIN", "ADMIN", "USER"]).nullable().optional(),
   /** The wallet bots can spend from, when this deployment offers one. Absent from older servers. */
   paymentWalletProvider: z.object({ id: z.string(), name: z.string() }).nullable().optional(),
 });

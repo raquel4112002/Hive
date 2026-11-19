@@ -24,6 +24,7 @@ import type {
 import { SandboxDamagedError } from "@rakazo/adapter-kit";
 import { browserProfilePathForScreen } from "@rakazo/core/node/desktop-runtime";
 import type { createRepos, PrismaClient } from "@rakazo/db";
+import { ownerThreadArgs } from "@rakazo/db";
 import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -120,7 +121,7 @@ describe("spawned bot creation", () => {
           spawnKey: "tool-call-1",
         },
       },
-      include: { thread: true },
+      include: { threads: ownerThreadArgs },
     });
     expect(result).toEqual({
       ok: true,

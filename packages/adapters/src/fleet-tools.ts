@@ -22,6 +22,8 @@ import {
   createRepos,
   InstructionConflictError,
   IsolationError,
+  ownerThread,
+  ownerThreadArgs,
   SpaceDeletionInProgressError,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
@@ -1086,7 +1088,7 @@ const botSelect = {
   modelProvider: true,
   modelId: true,
   thinkingLevel: true,
-  thread: { select: { id: true } },
+  threads: { ...ownerThreadArgs, select: { id: true } },
 } satisfies Prisma.BotSelect;
 
 function activeBotsWhere(run: FleetRun): Prisma.BotWhereInput {
@@ -1142,7 +1144,7 @@ async function resolveBot(prisma: PrismaClient, run: FleetRun, args: Record<stri
   if (bots.length > 1) {
     return refuse(`More than one bot is named "${name}". Pass bot_id instead.`);
   }
-  if (bots[0]) return bots[0];
+  if (bots[0]) return { ...bots[0], thread: ownerThread(bots[0]) };
   return refuse(
     id
       ? `No bot with id "${id}". Call list_fleet for ids.`

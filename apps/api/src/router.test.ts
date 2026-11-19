@@ -586,6 +586,11 @@ describe("model setup gate", () => {
     maxUploadSizeBytes?: number;
     maxAttachmentsPerMessage?: number;
     deploymentModelConfigured?: boolean;
+    ownModelBots?: Array<{
+      modelProvider: string | null;
+      modelId: string | null;
+      thinkingLevel: string | null;
+    }>;
     deploymentModelHostCredentials?: boolean;
     deploymentModelCredentialCipher?: string;
   }) {
@@ -602,7 +607,11 @@ describe("model setup gate", () => {
         findFirst: vi.fn().mockResolvedValue({ id: "bot-1", thread: { id: "thread-1" } }),
         findMany: vi
           .fn()
-          .mockResolvedValue([{ modelProvider: null, modelId: null, thinkingLevel: null }]),
+          .mockResolvedValue(
+            options.ownModelBots ?? [
+              { modelProvider: null, modelId: null, thinkingLevel: null },
+            ],
+          ),
       },
       userModelPreference: { findFirst: vi.fn().mockResolvedValue(null) },
       deploymentSettings: {
@@ -682,6 +691,23 @@ describe("model setup gate", () => {
 
   it("refuses to start a run when no model is configured", async () => {
     const { actor, handler } = modelGateDeps({ agentRuntime: "pi" });
+
+    const response = await call(handler, actor, "threads/send", {
+      botId: "bot-1",
+      text: "hello",
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      json: expect.objectContaining({
+        code: "BAD_REQUEST",
+        message: "Connect a model to start a run.",
+      }),
+    });
+  });
+
+  it("refuses a send when the bot belongs to the service account and has no model", async () => {
+    const { actor, handler } = modelGateDeps({ agentRuntime: "pi", ownModelBots: [] });
 
     const response = await call(handler, actor, "threads/send", {
       botId: "bot-1",

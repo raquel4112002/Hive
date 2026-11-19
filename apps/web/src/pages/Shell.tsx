@@ -16,6 +16,7 @@ import {
   isActive,
   isRunWorking,
   memberName,
+  MODEL_REQUIRED_SEND_ERROR,
 } from "@rakazo/core";
 import { fetchFresh, writeSaved } from "@rakazo/core/query";
 import type { GroupAvatarMember } from "@rakazo/ui-web";
@@ -73,6 +74,7 @@ import { ChatContextMenu } from "./shell/chat-context-menu";
 import { ChatHeader } from "./shell/chat-header";
 import { FALLBACK_BOT_COLOR } from "./shell/chat-shared";
 import type { CommandPaletteAction } from "./shell/command-palette";
+import { BotFeed } from "./shell/bot-feed";
 import { Composer } from "./shell/composer";
 import { ComputerOverlay } from "./shell/computer-overlay";
 import { ComputerPanel } from "./shell/computer-panel";
@@ -344,6 +346,7 @@ function SpaceShell() {
     notifyBrowserForEvent,
     markBotReadIfVisible: read.markBotReadIfVisible,
     markGroupReadOnReply: read.markGroupReadOnReply,
+    skipBotConversation: false,
   });
   const {
     editorProps: routineEditorProps,
@@ -364,6 +367,7 @@ function SpaceShell() {
     refreshThread,
     setPanel,
     messageProviders: messagingProviders,
+    needsModel: bootstrapMe?.needsModel === true,
   });
   // Until this visit's read lands, a bot shows the routines and skills it had last time.
   const activeRoutines =
@@ -969,6 +973,8 @@ function SpaceShell() {
                 <Trans>New bot</Trans>
               </Button>
             </div>
+          ) : active && (active.publication || active.accessLevel === "READ_ONLY") && !inGroup ? (
+            <BotFeed botId={active.id} rpc={rpc} />
           ) : (
             <Transcript
               key={activeSnapshot?.threadId}
@@ -1014,7 +1020,12 @@ function SpaceShell() {
             />
           )}
         </div>
-        {active || activeGroup ? (
+        {(active || activeGroup) &&
+        !(
+          active &&
+          !inGroup &&
+          (active.publication || active.accessLevel === "READ_ONLY")
+        ) ? (
           // Let messages continue behind the composer's rounded top corners.
           <div className="pointer-events-none relative z-30 -mt-7">
             {recordingSkill ? (
@@ -1028,10 +1039,13 @@ function SpaceShell() {
               enterToSend={enterToSend}
               activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
               running={composerRunning}
-              disabled={Boolean(recordingSkill)}
+              disabled={Boolean(recordingSkill) || bootstrapMe?.needsModel === true}
               pendingAttachments={composer.activePendingAttachments}
               attachmentNotice={composer.attachmentNotice}
-              sendError={sendError}
+              sendError={
+                sendError ??
+                (bootstrapMe?.needsModel ? MODEL_REQUIRED_SEND_ERROR : null)
+              }
               imageConfirmation={composer.imageConfirmation}
               onDraftEdited={composer.clearImageConfirmation}
               onOpenModels={() => {
@@ -1155,6 +1169,7 @@ function SpaceShell() {
         memoryProviderConfigured={memoryProviderConfig != null}
         setAgentSkills={setAgentSkills}
         onClearBot={(bot) => dialogs.setClearTarget({ kind: "bot", chat: bot })}
+        hiveRole={bootstrapMe?.hiveRole}
       />
 
       <Suspense fallback={null}>

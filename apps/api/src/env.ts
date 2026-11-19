@@ -5,6 +5,7 @@ import {
   mcpStdioOptionsFromEnv,
   photonProjectsFromEnv,
   resolveCloudAgentProvider,
+  hiveInstallationModel,
   resolveDeploymentModel,
   resolveSandboxProvider,
   secretStoreOptionsFromEnv,
@@ -217,6 +218,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   const sandboxProvider = resolveSandboxProvider(source);
   const cloudAgentProvider = resolveCloudAgentProvider(source);
   const deploymentModel = resolveDeploymentModel(source);
+  const installationModel = hiveInstallationModel(source);
   return {
     passwordAuth,
     breachedPasswordCheck: source.AUTH_BREACHED_PASSWORD_CHECK_ENABLED === "true",
@@ -265,7 +267,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     agentRuntime: source.AGENT_RUNTIME ?? "pi",
     // Provider, model and key resolve together: see resolveDeploymentModel.
     deploymentModelKey: deploymentModel.key,
-    deploymentModelConfigured: deploymentModel.configured,
+    deploymentModelConfigured: deploymentModel.configured || installationModel !== null,
     deploymentModelHostCredentials: deploymentModel.hostCredentials,
     e2bApiKey: source.E2B_API_KEY,
     novitaApiKey: source.NOVITA_API_KEY,
@@ -321,8 +323,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     teamChatBotId: optional(source.TEAM_CHAT_BOT_ID) ?? optional(source.SLACK_RAKAZO_BOT_ID),
     teamChatJudgeProvider: optional(source.TEAM_CHAT_JUDGE_PROVIDER),
     teamChatJudgeModel: optional(source.TEAM_CHAT_JUDGE_MODEL),
-    defaultProvider: deploymentModel.provider,
-    defaultModel: deploymentModel.model,
+    defaultProvider: installationModel?.provider ?? deploymentModel.provider,
+    defaultModel: installationModel?.model ?? deploymentModel.model,
     wakeupDriver: source.WAKEUP_DRIVER ?? "graphile",
     mcpStdioEnabled: source.MCP_STDIO_ENABLED === "true",
     mcpStdioAllowedCommands: (source.MCP_STDIO_ALLOWED_COMMANDS ?? "")

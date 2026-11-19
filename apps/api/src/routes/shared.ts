@@ -9,6 +9,7 @@ import {
 } from "@rakazo/adapters";
 import type { Actor, Me } from "@rakazo/contracts";
 import { attachmentMaxBytes, attachmentMaxCount, canonicalPiProviderId } from "@rakazo/contracts";
+import { INSTALLATION_MODEL_RECORD_ID, readHiveRole } from "@rakazo/db";
 import { isAdmin } from "../admins.js";
 import type { RouterDeps } from "../router.js";
 
@@ -21,7 +22,7 @@ function hostCredentials(active: boolean, provider: string) {
 }
 
 export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
-  const [user, setup, admin] = await Promise.all([
+  const [user, setup, admin, hive] = await Promise.all([
     deps.prisma.user.findUniqueOrThrow({
       where: { id: actor.userId },
       select: {
@@ -33,6 +34,7 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     }),
     modelSetup(deps, actor),
     isAdmin(deps, actor.userId),
+    readHiveRole(deps.prisma, actor),
   ]);
   return {
     ticketBoardEnabled: deps.env.ticketBoardEnabled === true,
@@ -71,6 +73,7 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     billingEnabled: Boolean(deps.billing),
     // Only billing deployments ask; self-hosted installs never see the survey.
     needsSignupSurvey: Boolean(deps.billing) && !user.signupSurvey,
+    hiveRole: hive?.role ?? null,
     paymentWalletProvider: deps.paymentWallet
       ? { id: deps.paymentWallet.describe().id, name: deps.paymentWallet.displayName }
       : null,
@@ -87,11 +90,43 @@ function computerHostFor(
   return null;
 }
 
+async function installationModelReady(
+  deps: RouterDeps,
+  settings: {
+    deploymentModelCredentialCipher?: string | null;
+    defaultModelProvider?: string | null;
+    defaultModelId?: string | null;
+  } | null,
+): Promise<boolean> {
+  const cipher = settings?.deploymentModelCredentialCipher;
+  if (
+    !cipher ||
+    settings?.defaultModelProvider !== "openai-compatible" ||
+    !settings.defaultModelId ||
+    typeof deps.secrets?.load !== "function"
+  ) {
+    return false;
+  }
+  try {
+    const plain = await deps.secrets.load(cipher, INSTALLATION_MODEL_RECORD_ID);
+    const parsed = JSON.parse(plain) as { kind?: string; apiKey?: string; baseUrl?: string };
+    return (
+      parsed.kind === "openai_compatible" &&
+      typeof parsed.baseUrl === "string" &&
+      parsed.baseUrl.trim().length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** The main model chat runs: the member's while it can run, else the deployment's. */
 export async function modelSetup(deps: RouterDeps, actor: Actor) {
   const [member, settings] = await Promise.all([
     resolveMemberMainModel({ prisma: deps.prisma, secretStore: deps.secrets }, actor),
-    deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+    typeof deps.prisma.deploymentSettings?.findUnique === "function"
+      ? deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } })
+      : null,
   ]);
   const main =
     member &&
@@ -104,6 +139,7 @@ export async function modelSetup(deps: RouterDeps, actor: Actor) {
   const hasDeployment =
     Boolean(deps.env.deploymentModelConfigured) &&
     (!funding?.creditPurchasesEnabled || funding.funding === "credits");
+  const installationReady = await installationModelReady(deps, settings);
   return {
     main,
     model:
@@ -115,16 +151,20 @@ export async function modelSetup(deps: RouterDeps, actor: Actor) {
     settings,
     funding,
     hasDeployment,
-    needsModel: deps.env.agentRuntime !== "scripted" && !main && !hasDeployment,
+    needsModel:
+      deps.env.agentRuntime !== "scripted" && !main && !hasDeployment && !installationReady,
   };
 }
 
 /** Whether every bot runs its own model on one of the member's connections, as a run selects it. */
 export async function botsRunOwnModels(deps: RouterDeps, actor: Actor, botIds: string[]) {
+  if (botIds.length === 0) return false;
   const bots = await deps.prisma.bot.findMany({
-    where: { id: { in: botIds }, userId: actor.userId, spaceId: actor.spaceId },
+    where: { id: { in: botIds }, spaceId: actor.spaceId, archivedAt: null },
     select: { modelProvider: true, modelId: true, thinkingLevel: true },
   });
+  // A service-owned bot is not the sender's row. An empty lookup is not "every bot has a model".
+  if (bots.length !== new Set(botIds).size) return false;
   const credentials = await Promise.all(
     bots.map(async (bot) => {
       const overrideCredential = bot.modelProvider

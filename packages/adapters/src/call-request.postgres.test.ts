@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { BackgroundJob } from "@rakazo/adapter-kit";
-import { createDb, createThreadEvents, runAsSystem, runAsTenant } from "@rakazo/db";
+import {
+  createDb,
+  createThreadEvents,
+  ownerThread,
+  ownerThreadArgs,
+  runAsSystem,
+  runAsTenant,
+} from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import { reconcileCallRequests, requestUserCall, settleCallRequest } from "./call-request.js";
 
@@ -35,11 +42,11 @@ postgres("call isolation and cooldown (PostgreSQL)", () => {
               userId,
               name: suffix,
               color: "ink",
-              thread: { create: { spaceId, userId } },
+              threads: { create: { spaceId, userId } },
             },
-            include: { thread: true },
+            include: { threads: ownerThreadArgs },
           });
-          const threadId = bot.thread!.id;
+          const threadId = ownerThread(bot)!.id;
           const task = await prisma.task.create({
             data: {
               spaceId,

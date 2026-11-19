@@ -23,10 +23,13 @@ import {
   userVisibleMessages,
 } from "@rakazo/core";
 import { chooseBotAvatar } from "./bot-avatar-choice.js";
+import { ownerThread, ownerThreadArgs } from "./canonical-thread.js";
 import {
+  accessLevelsFor,
   botsWhereForActor,
   ensureServiceAccount,
   readHiveRole,
+  scopedBotWhere,
   threadsForActor,
   visibleBotIds,
 } from "./hive.js";
@@ -35,6 +38,7 @@ import type { ComputerMode } from "./computers.js";
 import { ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { withNewestThreadMessages } from "./preview-messages.js";
+import { runAsSystemInTransaction } from "./row-security.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import {
@@ -84,6 +88,11 @@ function rosterUpdatedAt(newestMessage: { createdAt: Date } | undefined, botUpda
   return newestMessage?.createdAt ?? botUpdatedAt;
 }
 
+function carriedThread(bot: object) {
+  const thread = (bot as { thread?: { id?: string } | null }).thread;
+  return thread?.id ? thread : null;
+}
+
 function mapBot(
   bot: {
     id: string;
@@ -116,14 +125,16 @@ function mapBot(
     disabledBuiltinTools?: string[];
     webhookSecretId?: string | null;
     spawnKey?: string | null;
+    publication?: boolean;
   },
   preview = "",
   status = "idle",
   runErrorId: string | null = null,
   updatedAt: Date = bot.updatedAt,
   incomingCall: Bot["incomingCall"] = null,
+  accessLevel: Bot["accessLevel"] = null,
 ): Bot {
-  const thread = bot.thread ?? { id: "", unread: false };
+  const thread = bot.thread?.id ? bot.thread : { id: `hidden-${bot.id}`, unread: false };
   return {
     id: bot.id,
     spaceId: bot.spaceId,
@@ -157,6 +168,8 @@ function mapBot(
     teamChatRules: bot.teamChatRules ?? "",
     crossSpaceCommunication: bot.crossSpaceCommunication ?? false,
     fleetManagement: bot.fleetManagement ?? false,
+    publication: bot.publication ?? false,
+    accessLevel,
     // Stored lists may name a tool that no longer exists; settings resend what they read.
     disabledBuiltinTools: [...disabledBuiltinToolSet(bot.disabledBuiltinTools)],
     webhookConfigured: Boolean(bot.webhookSecretId),
@@ -225,12 +238,10 @@ export function createRepos(
       rows.map((bot) => bot.id),
     );
     const withThreads = rows.map((bot) => {
-      const thread = threads.get(bot.id);
+      const thread = threads.get(bot.id) ?? carriedThread(bot);
       return {
         ...bot,
-        thread: thread
-          ? { id: thread.id, unread: thread.unread }
-          : { id: `hidden-${bot.id}`, unread: false },
+        thread: thread ?? { id: `hidden-${bot.id}`, unread: false },
       };
     });
     const bots = await withNewestThreadMessages(
@@ -409,7 +420,7 @@ export function createRepos(
         prisma,
         await withLatestBotRuns(
           prisma,
-          rows.map((bot) => ({ ...bot, thread: threads.get(bot.id) ?? null })),
+          rows.map((bot) => ({ ...bot, thread: threads.get(bot.id) ?? carriedThread(bot) })),
         ),
         SIDEBAR_PREVIEW_MESSAGE_WINDOW,
       );
@@ -466,6 +477,11 @@ export function createRepos(
         for (const id of missing) checkedRunIds.add(id);
       };
       await classifyRunIds(candidateRunIds);
+      const accessLevels = await accessLevelsFor(
+        prisma,
+        actor.userId,
+        bots.map((bot) => bot.id),
+      );
       return Promise.all(
         bots.map(async (bot) => {
           let messages = bot.thread?.messages ?? [];
@@ -516,6 +532,7 @@ export function createRepos(
                 ? [callsByThread.get(bot.thread.id)!]
                 : [],
             ),
+            accessLevels.get(bot.id) ?? null,
           );
         }),
       );
@@ -525,17 +542,15 @@ export function createRepos(
 
     async getBot(actor: Actor, botId: string, options: { includeArchived?: boolean } = {}) {
       const bot = await prisma.bot.findFirst({
-        where: {
-          AND: [
-            await botsWhereForActor(prisma, actor, options.includeArchived ? "any" : false),
-            { id: botId },
-          ],
-        },
+        where: scopedBotWhere(
+          await botsWhereForActor(prisma, actor, options.includeArchived ? "any" : false),
+          botId,
+        ),
         include: { computer: true },
       });
       if (!bot) throw new IsolationError();
       const threads = await threadsForActor(prisma, actor, [bot.id]);
-      return { ...bot, thread: threads.get(bot.id) ?? null };
+      return { ...bot, thread: threads.get(bot.id) ?? carriedThread(bot) };
     },
 
     async createBot(
@@ -654,52 +669,57 @@ export function createRepos(
               disabledBuiltinTools,
             },
           });
-          const thread = await tx.thread.create({
-            data: {
-              spaceId: actor.spaceId,
-              botId: created.id,
-              userId: ownerId,
-            },
-          });
-          if (input.initialMessage) {
-            await createThreadMessageInTransaction(tx, {
-              threadId: thread.id,
-              ...input.initialMessage,
-              markUnread: false,
+          const finishOwnedRecords = async () => {
+            const thread = await tx.thread.create({
+              data: {
+                spaceId: actor.spaceId,
+                botId: created.id,
+                userId: ownerId,
+              },
             });
-          }
-          if (input.computerMode === "dedicated") {
-            const dedicated = await ensureComputerRecord(tx, {
-              mode: "dedicated",
-              spaceId: actor.spaceId,
-              userId: ownerId,
-              botId: created.id,
-              kind,
+            if (input.initialMessage) {
+              await createThreadMessageInTransaction(tx, {
+                threadId: thread.id,
+                ...input.initialMessage,
+                markUnread: false,
+              });
+            }
+            if (input.computerMode === "dedicated") {
+              const dedicated = await ensureComputerRecord(tx, {
+                mode: "dedicated",
+                spaceId: actor.spaceId,
+                userId: ownerId,
+                botId: created.id,
+                kind,
+              });
+              await tx.bot.update({ where: { id: created.id }, data: { computerId: dedicated.id } });
+            }
+            await tx.browserProfile.create({
+              data: {
+                spaceId: actor.spaceId,
+                botId: created.id,
+                userId: ownerId,
+              },
             });
-            await tx.bot.update({ where: { id: created.id }, data: { computerId: dedicated.id } });
-          }
-          await tx.browserProfile.create({
-            data: {
-              spaceId: actor.spaceId,
-              botId: created.id,
-              userId: ownerId,
-            },
-          });
-          await tx.memoryDocument.create({
-            data: {
-              spaceId: actor.spaceId,
-              userId: ownerId,
-              botId: created.id,
-              scope: "bot",
-              path: "MEMORY.md",
-              content: initialBotMemory(input.name),
-            },
-          });
-          await input.seed?.(tx, created.id);
-          return tx.bot.findFirstOrThrow({
-            where: { id: created.id },
-            include: { thread: true, computer: true },
-          });
+            await tx.memoryDocument.create({
+              data: {
+                spaceId: actor.spaceId,
+                userId: ownerId,
+                botId: created.id,
+                scope: "bot",
+                path: "MEMORY.md",
+                content: initialBotMemory(input.name),
+              },
+            });
+            await input.seed?.(tx, created.id);
+            return tx.bot.findFirstOrThrow({
+              where: { id: created.id },
+              include: { threads: ownerThreadArgs, computer: true },
+            });
+          };
+          return ownerId === actor.userId
+            ? finishOwnedRecords()
+            : runAsSystemInTransaction(tx, "hive bot records", finishOwnedRecords);
         });
 
       const findBySpawnKey = async () => {
@@ -711,7 +731,7 @@ export function createRepos(
               spawnKey,
             },
           },
-          include: { thread: true, computer: true },
+          include: { threads: ownerThreadArgs, computer: true },
         });
       };
 
@@ -746,7 +766,7 @@ export function createRepos(
           }
         }
       }
-      return mapBot(bot);
+      return mapBot({ ...bot, thread: ownerThread(bot) });
     },
 
     async reorderBots(actor: Actor, botIds: string[]): Promise<void> {
@@ -768,9 +788,7 @@ export function createRepos(
 
     async setBotComputer(actor: Actor, botId: string, mode: ComputerMode): Promise<Bot> {
       const bot = await prisma.bot.findFirst({
-        where: {
-          AND: [await botsWhereForActor(prisma, actor, false), { id: botId }],
-        },
+        where: scopedBotWhere(await botsWhereForActor(prisma, actor, false), botId),
         include: { computer: true },
       });
       if (!bot?.computer) throw new IsolationError();
@@ -789,11 +807,11 @@ export function createRepos(
           return tx.bot.update({
             where: { id: botId },
             data: { computerId: computer.id },
-            include: { thread: true, computer: true },
+            include: { threads: ownerThreadArgs, computer: true },
           });
         }),
       );
-      return mapBot(updated);
+      return mapBot({ ...updated, thread: ownerThread(updated) });
     },
   };
 }

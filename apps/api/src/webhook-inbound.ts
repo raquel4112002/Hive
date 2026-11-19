@@ -5,6 +5,7 @@ import { inboundRoutineModelPin } from "@rakazo/adapters";
 import type { MessageBlock } from "@rakazo/contracts";
 import { escapePromptData, inboundRoutineBlock, messageBlockForArtifact } from "@rakazo/core";
 import type { PrismaClient } from "@rakazo/db";
+import { ownerThread, ownerThreadArgs } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 
 export const WEBHOOK_MAX_BODY_BYTES = 64 * 1024;
@@ -196,11 +197,12 @@ export async function loadWebhookTarget(
       spaceId: true,
       userId: true,
       webhookSecretId: true,
-      thread: { select: { id: true } },
+      threads: { ...ownerThreadArgs, select: { id: true } },
     },
   });
+  const thread = bot ? ownerThread(bot) : null;
 
-  if (!bot?.thread || !bot.webhookSecretId) {
+  if (!thread || !bot?.webhookSecretId) {
     cache.delete(botId);
     return null;
   }
@@ -240,7 +242,7 @@ export async function loadWebhookTarget(
       userId: bot.userId,
       webhookSecretId: bot.webhookSecretId,
     },
-    threadId: bot.thread.id,
+    threadId: thread.id,
     expected,
   };
 }

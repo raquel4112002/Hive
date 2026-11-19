@@ -6,6 +6,7 @@ import {
   expandSkillReferencesInPrompt,
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
+  MODEL_REQUIRED_SEND_ERROR,
 } from "@rakazo/core";
 import { IsolationError, Prisma } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
@@ -25,7 +26,7 @@ import {
   routineTestTarget,
 } from "../routines.js";
 import type { RouterContext } from "./context.js";
-import { isRecordNotFound } from "./shared.js";
+import { isRecordNotFound, modelSetup } from "./shared.js";
 
 export function routinesRoutes(ctx: RouterContext) {
   const { deps, repos, announceRoutine, codexCatalog, agentSkills, authed } = ctx;
@@ -76,9 +77,13 @@ export function routinesRoutes(ctx: RouterContext) {
           }
         }
         await assertRoutineModel(deps, context.actor, input, codexCatalog);
-        const row = await deps.prisma.routine.create({
-          data: routineRowData(context.actor, input, routineNextRunAt(input)),
-        });
+        const setup = await modelSetup(deps, context.actor);
+        if (setup.needsModel && !input.modelProvider) {
+          throw new ORPCError("BAD_REQUEST", { message: MODEL_REQUIRED_SEND_ERROR });
+        }
+        const data = routineRowData(context.actor, input, routineNextRunAt(input));
+        if (bot.publication && input.notify === undefined) data.notify = false;
+        const row = await deps.prisma.routine.create({ data });
         await announceRoutine(context.actor, bot, row);
         return mapRoutine(row);
       }),
@@ -319,7 +324,11 @@ export function routinesRoutes(ctx: RouterContext) {
         return { ok: true as const };
       }),
       testRun: authed.routines.testRun.handler(async ({ context, input }) => {
+        const setup = await modelSetup(deps, context.actor);
         const target = await routineTestTarget(deps.prisma, repos, context.actor, input.routineId);
+        if (setup.needsModel && !target.routine.modelProvider) {
+          throw new ORPCError("BAD_REQUEST", { message: MODEL_REQUIRED_SEND_ERROR });
+        }
         const { threadId } = target;
         // The previous release stored the key without the user id; a retry still replays it.
         const keys = input.clientNonce
@@ -332,7 +341,7 @@ export function routinesRoutes(ctx: RouterContext) {
         const findExisting = async () =>
           keys.length
             ? deps.prisma.run.findFirst({
-                where: { threadId, userId: context.actor.userId, clientNonce: { in: keys } },
+                where: { threadId, userId: target.userId, clientNonce: { in: keys } },
                 select: { id: true },
               })
             : null;

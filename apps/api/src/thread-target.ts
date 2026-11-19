@@ -340,7 +340,9 @@ export async function resolveThreadTarget(
     const bot = await repos.getBot(actor, input.botId, options);
     const thread =
       bot.thread ?? (await ensureUserThread(prisma, actor, bot.id));
-    if (!thread || thread.userId !== actor.userId) throw new IsolationError();
+    if (!thread || (thread.userId != null && thread.userId !== actor.userId)) {
+      throw new IsolationError();
+    }
     return {
       kind: "bot",
       botId: bot.id,

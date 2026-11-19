@@ -189,11 +189,17 @@ export function spacesRoutes(ctx: RouterContext) {
       ]);
       const { bots, groups, botSections } = navigation.current;
       const active = bots.find((bot) => bot.id === input.botId) ?? bots[0];
+      // Read-only people and publication bots have no personal thread.
+      // A manager in Todos with CHAT has their own thread, like anyone else.
+      const conversation =
+        active && !active.publication && active.accessLevel !== "READ_ONLY";
       const [thread, routines] = active
         ? await Promise.all([
-            resolveThreadTarget(deps.prisma, actor, { botId: active.id }).then((target) =>
-              threadSnapshot(deps, target),
-            ),
+            conversation
+              ? resolveThreadTarget(deps.prisma, actor, { botId: active.id }).then((target) =>
+                  threadSnapshot(deps, target),
+                )
+              : Promise.resolve(null),
             listRoutinesDto(deps, actor, active.id),
           ])
         : [null, []];

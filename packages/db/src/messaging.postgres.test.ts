@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
+import { ownerThread, ownerThreadArgs } from "./canonical-thread.js";
 import { issueMessagingLinkCode, provisionMessagingIdentity } from "./messaging.js";
 import { asSystem, runAsSystem } from "./row-security.js";
 
@@ -76,14 +77,14 @@ describePostgres("provisionMessagingIdentity (PostgreSQL)", () => {
     const bot = await runAsSystem("test fixture", () =>
       prisma.bot.findUnique({
         where: { id: result.botId },
-        include: { thread: true },
+        include: { threads: ownerThreadArgs },
       }),
     );
     expect(bot).toBeTruthy();
     expect(bot!.spaceId).toBe(result.spaceId);
     expect(bot!.userId).toBe(result.userId);
-    expect(bot!.thread).toBeTruthy();
-    expect(result.threadId).toBe(bot!.thread!.id);
+    expect(ownerThread(bot!)).toBeTruthy();
+    expect(result.threadId).toBe(ownerThread(bot!)!.id);
 
     const identity = await asSystem(prisma).messagingIdentity.findUnique({
       where: { provider_address: { provider, address } },

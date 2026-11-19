@@ -222,8 +222,8 @@ export async function runTrial(
       });
     }
     if (scenario.history) {
-      const thread = await prisma.thread.findUniqueOrThrow({
-        where: { botId },
+      const thread = await prisma.thread.findFirstOrThrow({
+        where: { botId, routineId: null },
         select: { id: true },
       });
       seededThreadId = thread.id;
@@ -625,7 +625,10 @@ export async function runTrial(
         routineRuns.push({
           text: lastText,
           unread: (
-            await prisma.thread.findUniqueOrThrow({ where: { botId }, select: { unread: true } })
+            await prisma.thread.findFirstOrThrow({
+              where: { botId, routineId: null },
+              select: { unread: true },
+            })
           ).unread,
           messages: messages.map((m) => m.blocks as RoutineEvidence["messages"][number]),
           progress: observed

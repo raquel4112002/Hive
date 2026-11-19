@@ -20,6 +20,7 @@ import type { SettingsSection } from "../shell-overlay";
 import { AgentImportForm } from "./agent-import";
 import type { BotPanelTab } from "./bot-panel";
 import { BotSettings } from "./bot-panel";
+import { HiveAssign } from "./hive-assign";
 import { firstThreadRoute } from "./use-shell-navigation";
 
 /** The panel beside the chat: a bot's tabs, a routine, a group, or an import. */
@@ -50,6 +51,7 @@ export function ShellSidePanel({
   memoryProviderConfigured,
   setAgentSkills,
   onClearBot,
+  hiveRole,
 }: {
   rpc: ReturnType<typeof createSpaceRpc>;
   panel: Panel;
@@ -77,6 +79,7 @@ export function ShellSidePanel({
   memoryProviderConfigured: boolean;
   setAgentSkills: (skills: AgentSkillCatalogEntry[]) => void;
   onClearBot: (bot: Bot) => void;
+  hiveRole?: "SUPER_ADMIN" | "ADMIN" | "USER" | null;
 }) {
   const { t } = useLingui();
   const open = Boolean(panel && (active || activeGroup || panel === "import-agent"));
@@ -176,6 +179,14 @@ export function ShellSidePanel({
                 openCreatedBot(bot);
                 void refreshBots().catch(() => undefined);
               }}
+            />
+          ) : null}
+          {botTab && active && (hiveRole === "ADMIN" || hiveRole === "SUPER_ADMIN") ? (
+            <HiveAssign
+              botId={active.id}
+              publication={active.publication === true}
+              rpc={rpc}
+              onChanged={() => refreshBots()}
             />
           ) : null}
           {botTab && active ? (

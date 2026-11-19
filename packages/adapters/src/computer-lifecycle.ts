@@ -22,6 +22,7 @@ import {
   screenLeaseId,
 } from "@rakazo/core";
 import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
+import { ownerThread, ownerThreadArgs } from "@rakazo/db";
 import {
   expireComputerExecutionLeases,
   parseComputerMode,
@@ -1152,12 +1153,13 @@ export async function replaceComputer(
     try {
       const bot = await deps.prisma.bot.findFirst({
         where: { id: botId },
-        select: { thread: { select: { id: true } } },
+        select: { threads: { ...ownerThreadArgs, select: { id: true } } },
       });
-      if (bot?.thread) {
+      const thread = bot ? ownerThread(bot) : null;
+      if (thread) {
         await deps.events.append({
           spaceId: context.spaceId,
-          threadId: bot.thread.id,
+          threadId: thread.id,
           botId,
           type: "computer.takeover.released",
           payload: {

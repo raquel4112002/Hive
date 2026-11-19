@@ -68,6 +68,7 @@ import {
   reconcileCloudAgents,
   reconcileComputerUpdates,
   reconcilePurchases,
+  hiveInstallationModel,
   resolveDeploymentModel,
   resolvePiSessionRoot,
   resolveSandboxProvider,
@@ -153,8 +154,9 @@ async function main() {
       ? new ScriptedAgentRuntime()
       : new PiAgentRuntime({ sessionRoot: resolvePiSessionRoot(dataDir) });
   // Same resolver the API uses, so both processes agree on provider, model and key.
-  const { key: deploymentModelKey, configured: deploymentModelConfigured } =
-    resolveDeploymentModel();
+  const { key: deploymentModelKey, configured: deploymentModelFromEnv } = resolveDeploymentModel();
+  const deploymentModelConfigured =
+    deploymentModelFromEnv || hiveInstallationModel() !== null;
   const sandboxProvider = resolveSandboxProvider(process.env);
   const sandbox = await createRunSandbox(sandboxProvider, {
     ...sandboxProviderOptionsFromEnv(process.env),
@@ -284,6 +286,7 @@ async function main() {
     },
     secrets: [
       deploymentModelKey ?? "",
+      process.env.HIVE_MODEL_API_KEY ?? "",
       process.env.COMPOSIO_API_KEY ?? "",
       process.env.CURSOR_API_KEY ?? "",
       process.env.TYPESAFE_API_KEY ?? "",

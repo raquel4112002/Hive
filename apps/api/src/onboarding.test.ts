@@ -141,7 +141,13 @@ it("rejects a thread from another user or space before reading its messages", as
   const { deps, actor, tx } = fixture([
     { connectorId: "pipedream", slug: "slack", connected: true },
   ]);
-  Object.assign(deps.prisma, { thread: { findFirst: vi.fn(async () => null) } });
+  Object.assign(deps.prisma, {
+    thread: {
+      findFirst: vi.fn(async (args: { where: { userId?: string } }) =>
+        args.where.userId ? { id: "thread" } : null,
+      ),
+    },
+  });
   await expect(
     markAppConnected(deps, actor, "bot", "slack", "pipedream", "other-thread"),
   ).rejects.toThrow();
@@ -157,7 +163,11 @@ it("updates an accessible group thread and emits its normal update event", async
   ]);
   Object.assign(deps.prisma, {
     thread: {
-      findFirst: vi.fn(async () => ({ id: "group-thread", groupId: "group" })),
+      findFirst: vi.fn(async (args: { where: { userId?: string } }) =>
+        args.where.userId
+          ? { id: "thread" }
+          : { id: "group-thread", groupId: "group" },
+      ),
     },
   });
   Object.assign(deps.prisma, {
@@ -208,7 +218,11 @@ it("rejects another user's group even in the same space", async () => {
   ]);
   Object.assign(deps.prisma, {
     thread: {
-      findFirst: vi.fn(async () => ({ id: "other-thread", groupId: "other-group" })),
+      findFirst: vi.fn(async (args: { where: { userId?: string } }) =>
+        args.where.userId
+          ? { id: "thread" }
+          : { id: "other-thread", groupId: "other-group" },
+      ),
     },
   });
   Object.assign(deps.prisma, { chatGroup: { findFirst: vi.fn(async () => null) } });
@@ -217,7 +231,7 @@ it("rejects another user's group even in the same space", async () => {
   ).rejects.toThrow();
   expect(tx.message.update).not.toHaveBeenCalled();
   expect(deps.prisma.bot.findFirst).toHaveBeenCalledWith(
-    expect.objectContaining({ where: { id: "bot", spaceId: actor.spaceId, userId: actor.userId } }),
+    expect.objectContaining({ where: { id: "bot", spaceId: actor.spaceId } }),
   );
 });
 

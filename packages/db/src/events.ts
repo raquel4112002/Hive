@@ -15,6 +15,7 @@ import {
   MessageBlock as MessageBlockSchema,
   ThreadActivityPayloadSchema,
 } from "@rakazo/contracts";
+import { ownerThread, ownerThreadArgs } from "./canonical-thread.js";
 import {
   ACTIVE_RUN_STATUSES,
   blocksToAgentHistoryText,
@@ -1562,9 +1563,10 @@ export async function finalizeComputerControlRelease(
 
     const bot = await tx.bot.findFirst({
       where: { id: input.botId, spaceId: input.spaceId },
-      select: { thread: { select: { id: true } } },
+      select: { threads: { ...ownerThreadArgs, select: { id: true } } },
     });
-    if (!bot?.thread) return { threadId: null, seq: null, runId };
+    const thread = bot ? ownerThread(bot) : null;
+    if (!thread) return { threadId: null, seq: null, runId };
 
     // Group cards live on the run's thread. Stopped runs cannot write history.
     if (controlRunId && runThreadId && waiting?.status !== "cancelled") {
@@ -1579,7 +1581,7 @@ export async function finalizeComputerControlRelease(
 
     const event = await appendEventInTransaction(tx, {
       spaceId: input.spaceId,
-      threadId: runThreadId ?? bot.thread.id,
+      threadId: runThreadId ?? thread.id,
       botId: input.botId,
       runId: runId ?? undefined,
       type: "computer.takeover.released",
@@ -1879,7 +1881,7 @@ async function finalizeRunOnce(
       });
     }
     const continuationRunId = await createPendingSteeringRun(tx, input);
-    await tx.bot.update({ where: { id: input.botId }, data: { updatedAt: now } });
+    await tx.bot.updateMany({ where: { id: input.botId }, data: { updatedAt: now } });
     return { threadId: lastEvent.threadId, seq: lastEvent.seq, continuationRunId, firstResponse };
   }, FINALIZE_TRANSACTION_OPTIONS);
 }

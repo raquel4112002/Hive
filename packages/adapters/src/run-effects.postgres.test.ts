@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { createDb, createThreadEvents, RunHistoryWriteError, runAsSystem } from "@rakazo/db";
+import {
+  createDb,
+  createThreadEvents,
+  ownerThread,
+  ownerThreadArgs,
+  RunHistoryWriteError,
+  runAsSystem,
+} from "@rakazo/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { claimEffect, recordEffect } from "./run-effects.js";
@@ -32,11 +39,11 @@ postgres("tool effects under the run lease (PostgreSQL)", () => {
           userId,
           name: "Effects",
           color: "ink",
-          thread: { create: { spaceId, userId } },
+          threads: { create: { spaceId, userId } },
         },
-        include: { thread: true },
+        include: { threads: ownerThreadArgs },
       });
-      const threadId = bot.thread!.id;
+      const threadId = ownerThread(bot)!.id;
       const task = await prisma.task.create({
         data: {
           spaceId,

@@ -9,11 +9,18 @@ export type BotThreadDeps = {
 
 export async function requireBotThread(deps: BotThreadDeps, actor: Actor, botId: string) {
   const bot = await deps.prisma.bot.findFirst({
-    where: { id: botId, spaceId: actor.spaceId, userId: actor.userId },
-    include: { thread: true },
+    where: { id: botId, spaceId: actor.spaceId },
   });
-  if (!bot?.thread) throw new IsolationError();
-  return { bot, thread: bot.thread };
+  if (!bot) throw new IsolationError();
+  const lookup = deps.prisma.thread?.findFirst;
+  const thread =
+    typeof lookup === "function"
+      ? await lookup.call(deps.prisma.thread, {
+          where: { botId, spaceId: actor.spaceId, userId: actor.userId, routineId: null },
+        })
+      : ((bot as { thread?: { id: string } | null }).thread ?? null);
+  if (!thread) throw new IsolationError();
+  return { bot, thread };
 }
 
 export async function updateBlocks(

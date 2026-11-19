@@ -13,6 +13,8 @@ import type { PrismaClient } from "@rakazo/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
+  ownerThread,
+  ownerThreadArgs,
   withTransactionRetry,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
@@ -98,9 +100,13 @@ export async function messageBot(
 
   const candidates = await deps.prisma.bot.findMany({
     where: { spaceId: run.spaceId, userId: run.userId, archivedAt: null },
-    select: { id: true, name: true, thread: { select: { id: true } } },
+    select: { id: true, name: true, threads: { ...ownerThreadArgs, select: { id: true } } },
   });
-  const target = resolveBotAddress(candidates, {
+  const addressed = candidates.map((candidate) => ({
+    ...candidate,
+    thread: ownerThread(candidate),
+  }));
+  const target = resolveBotAddress(addressed, {
     botId: input.bot_id,
     name: input.confirm_name,
   });

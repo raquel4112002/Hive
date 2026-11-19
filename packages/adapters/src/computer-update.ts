@@ -4,6 +4,7 @@ import type { ComputerUpdate } from "@rakazo/contracts";
 import { ComputerUpdateSchema } from "@rakazo/contracts";
 import { ACTIVE_RUN_STATUSES } from "@rakazo/core";
 import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
+import { ownerThread, ownerThreadArgs } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import {
   enqueueTakeoverContinuation,
@@ -500,12 +501,13 @@ async function recordTakeoverHandback(
   try {
     const bot = await deps.prisma.bot.findFirst({
       where: { id: botId },
-      select: { thread: { select: { id: true } } },
+      select: { threads: { ...ownerThreadArgs, select: { id: true } } },
     });
-    if (!bot?.thread) return;
+    const thread = bot ? ownerThread(bot) : null;
+    if (!thread) return;
     await deps.events.append({
       spaceId: handback.spaceId,
-      threadId: bot.thread.id,
+      threadId: thread.id,
       botId,
       ...(runId ? { runId } : {}),
       type: "computer.takeover.released",

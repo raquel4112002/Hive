@@ -9,7 +9,7 @@ import {
   nextCronDateAcrossStrict,
 } from "@rakazo/core";
 import type { Prisma, PrismaClient } from "@rakazo/db";
-import { IsolationError } from "@rakazo/db";
+import { ensureRoutineThread, IsolationError } from "@rakazo/db";
 import type { RouterDeps } from "./router.js";
 import type { RouterContext } from "./routes/context.js";
 
@@ -47,7 +47,7 @@ export function routineRowData(actor: Actor, input: CreateRoutineInput, nextRunA
     prompt: input.prompt,
     crons: input.crons,
     timezone: input.timezone,
-    notify: input.notify,
+    notify: input.notify ?? true,
     active: input.active,
     webhookEnabled: input.webhookEnabled,
     githubEnabled: input.githubEnabled,
@@ -137,13 +137,22 @@ export function routineDto(
 export function createRoutineAnnouncer(deps: RouterDeps) {
   const announceRoutine = async (
     actor: Actor,
-    bot: { id: string; thread: { id: string } | null },
+    bot: { id: string; thread?: { id: string } | null },
     row: Awaited<ReturnType<typeof deps.prisma.routine.create>>,
   ) => {
-    if (bot.thread) {
+    const routineThread = await ensureRoutineThread(deps.prisma, {
+      routineId: row.id,
+      botId: bot.id,
+      spaceId: actor.spaceId,
+    }).catch((error: unknown) => {
+      if (error instanceof IsolationError) return null;
+      throw error;
+    });
+    const threadId = routineThread?.id ?? bot.thread?.id;
+    if (threadId) {
       await deps.events.append({
         spaceId: actor.spaceId,
-        threadId: bot.thread.id,
+        threadId,
         botId: bot.id,
         type: "routine.created",
         payload: { name: row.name },
@@ -167,9 +176,32 @@ export async function routineTestTarget(
     where: { id: routineId, spaceId: actor.spaceId, userId: actor.userId },
   });
   if (!routine) throw new IsolationError();
-  const bot = await repos.getBot(actor, routine.botId);
-  if (!bot.thread) throw new IsolationError();
-  return { routine, botId: bot.id, threadId: bot.thread.id };
+  await repos.getBot(actor, routine.botId);
+  const serviceThread = await ensureRoutineThread(prisma, {
+    routineId: routine.id,
+    botId: routine.botId,
+    spaceId: routine.spaceId,
+  });
+  if (serviceThread) {
+    return {
+      routine,
+      botId: routine.botId,
+      threadId: serviceThread.id,
+      userId: serviceThread.userId,
+    };
+  }
+  const owner = await prisma.bot.findFirst({
+    where: { id: routine.botId, spaceId: actor.spaceId },
+    select: { userId: true },
+  });
+  const legacy = owner
+    ? await prisma.thread.findFirst({
+        where: { botId: routine.botId, userId: owner.userId, routineId: null },
+        select: { id: true, userId: true },
+      })
+    : null;
+  if (!legacy) throw new IsolationError();
+  return { routine, botId: routine.botId, threadId: legacy.id, userId: legacy.userId };
 }
 
 /**
@@ -188,13 +220,13 @@ export async function createRoutineTestRun(
   prompt: string,
   nonce: string | undefined,
 ) {
-  const { routine, botId, threadId } = target;
+  const { routine, botId, threadId, userId } = target;
   const task = await tx.task.create({
     data: {
       spaceId: actor.spaceId,
       botId,
       threadId,
-      userId: actor.userId,
+      userId,
       prompt,
       status: "queued",
     },
@@ -210,7 +242,7 @@ export async function createRoutineTestRun(
       botId,
       threadId,
       taskId: task.id,
-      userId: actor.userId,
+      userId,
       status: "queued",
       trigger: "routine",
       routineId: routine.id,

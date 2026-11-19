@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  conversationAllowed,
   dedicatedScreenAllowed,
+  effectiveAccess,
   delegationAllowed,
   hiveComputerLimits,
   hiveModelSource,
@@ -98,6 +100,15 @@ describe("hive access", () => {
         slotState: "running",
       }),
     ).toBe(false);
+  });
+
+  it("lets CHAT win over READ_ONLY and keeps publication bots out of conversation", () => {
+    expect(effectiveAccess([])).toBeNull();
+    expect(effectiveAccess(["READ_ONLY"])).toBe("READ_ONLY");
+    expect(effectiveAccess(["READ_ONLY", "CHAT"])).toBe("CHAT");
+    expect(conversationAllowed({ access: "CHAT", publication: false })).toBe(true);
+    expect(conversationAllowed({ access: "CHAT", publication: true })).toBe(false);
+    expect(conversationAllowed({ access: "READ_ONLY", publication: false })).toBe(false);
   });
 
   it("reads the computer cap and idle time from the environment", () => {

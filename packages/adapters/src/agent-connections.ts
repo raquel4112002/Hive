@@ -12,6 +12,8 @@ import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
+  ownerThread,
+  ownerThreadArgs,
   crossSpaceCommunicationAllowed,
   runAsSystem,
 } from "@rakazo/db";
@@ -334,12 +336,18 @@ async function deliverToConnectedAgent(
 
   const target = await deps.prisma.bot.findUnique({
     where: { id: targetIdentity.botId },
-    select: { id: true, name: true, archivedAt: true, thread: { select: { id: true } } },
+    select: {
+      id: true,
+      name: true,
+      archivedAt: true,
+      threads: { ...ownerThreadArgs, select: { id: true } },
+    },
   });
-  if (!target || target.archivedAt || !target.thread) {
+  const targetThread = target ? ownerThread(target) : null;
+  if (!target || target.archivedAt || !targetThread) {
     return { ok: false, error: "that agent is not available" };
   }
-  const targetThreadId = target.thread.id;
+  const targetThreadId = targetThread.id;
   const deliveryKey = input.deliveryKey ? `agent-message:${input.deliveryKey}` : undefined;
   const wakePrompt = buildBotMessageWakePrompt({ from: sender, text: message });
 

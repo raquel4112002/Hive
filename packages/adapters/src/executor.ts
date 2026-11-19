@@ -33,6 +33,7 @@ import {
 } from "@rakazo/core";
 import {
   effectiveMemoryScope,
+  ensureHiveConversationComputer,
   hiveConnectionWhere,
   isPartialReplyClientNonce,
   isTooManyDatabaseConnections,
@@ -83,6 +84,7 @@ import {
 } from "./connection-context.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
+import { hiveInstallationModel, hiveRunModel } from "./hive-installation-model.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import type { FleetRun } from "./fleet-tools.js";
 import { loadBotGroupDirectory, loadGroupContext } from "./group-handoff.js";
@@ -301,7 +303,16 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           computer: { select: { scope: true } },
         },
       });
-      if (!leaseTarget.computerId) throw new Error("Bot has no computer");
+      const hiveComputerId =
+        run.trigger === "routine"
+          ? null
+          : await ensureHiveConversationComputer(deps.prisma, {
+              botId: run.botId,
+              userId: run.userId,
+              spaceId: run.spaceId,
+            });
+      const conversationComputerId = hiveComputerId ?? leaseTarget.computerId;
+      if (!conversationComputerId) throw new Error("Bot has no computer");
       if (leaseTarget.computerSwitching) {
         await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
         return;
@@ -329,7 +340,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       let computerLease: ComputerExecutionLease | null = null;
       try {
         computerLease = await acquireComputerExecutionLease(deps.prisma, {
-          computerId: leaseTarget.computerId,
+          computerId: conversationComputerId,
           runId,
           botId: run.botId,
           workerId,
@@ -337,7 +348,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         });
         if (!computerLease && leaseTarget.computer?.scope === "dedicated") {
           computerLease = await acquireDedicatedScreenLeaseFence(deps.prisma, {
-            computerId: leaseTarget.computerId,
+            computerId: conversationComputerId,
             runId,
             botId: run.botId,
             workerId,
@@ -349,7 +360,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         // Maintenance or suspension sends no release, so only a held lease waits for one.
         const heldByAnotherRun = await deps.prisma.computerExecutionLease.findFirst({
           where: {
-            computerId: leaseTarget.computerId,
+            computerId: conversationComputerId,
             botId: run.botId,
             runId: { not: runId },
             expiresAt: { gt: new Date() },
@@ -511,7 +522,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           deps.paymentWallet ? loadPurchaseRedactions(deps, run) : [],
           loadRunLoginRedactions(deps.prisma, deps.secretStore, run, run.id),
         ]);
-        if (hiveConnections) {
+        // A routine runs as the service account on the bot's computer. A person's
+        // conversation uses that person's own computer.
+        if (hiveComputerId) {
+          bot.computer = await deps.prisma.computer.findUnique({ where: { id: hiveComputerId } });
+        } else if (hiveConnections && run.trigger !== "routine") {
           const slot = await deps.prisma.botUserComputer.findUnique({
             where: { botId_userId: { botId: run.botId, userId: run.userId } },
           });
@@ -753,7 +768,13 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             }),
           );
         }
-        const runDeployment = deps.deploymentModelConfigured ? resolveDeploymentModel() : null;
+        const installation = hiveInstallationModel();
+        const hiveChoice = installation ? hiveRunModel(modelChoice, installation) : null;
+        const runDeployment = hiveChoice
+          ? { provider: hiveChoice.provider, model: hiveChoice.model }
+          : deps.deploymentModelConfigured
+            ? resolveDeploymentModel()
+            : null;
         const runtimeFallback = runtimeFallbackModel(deps.runtime);
         const pinError =
           run.modelPinned &&
@@ -1448,7 +1469,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                   userId: run.userId,
                   archivedAt: null,
                   id: { not: bot.id },
-                  thread: { isNot: null },
+                  threads: { some: { routineId: null } },
                 },
                 select: { id: true, name: true, description: true },
                 orderBy: { createdAt: "asc" },

@@ -1,6 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import type { Bot, Routine, ThinkingLevel, ThreadSnapshot } from "@rakazo/contracts";
-import { cronFromPreset } from "@rakazo/core";
+import { cronFromPreset, MODEL_REQUIRED_SEND_ERROR } from "@rakazo/core";
 import type { ComponentProps, Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useRef, useState } from "react";
 import { localTimezone } from "../../lib/local-timezone";
@@ -26,6 +26,7 @@ export function useRoutineEditor({
   refreshThread,
   setPanel,
   messageProviders,
+  needsModel = false,
 }: {
   rpc: ReturnType<typeof createSpaceRpc>;
   active: Bot | undefined;
@@ -35,6 +36,7 @@ export function useRoutineEditor({
   setBots: Dispatch<SetStateAction<Bot[]>>;
   refreshThread: (botId: string) => Promise<ThreadSnapshot>;
   setPanel: (panel: Panel) => void;
+  needsModel?: boolean;
 }) {
   const { t } = useLingui();
   const [routineDraft, setRoutineDraft] = useState<RoutineDraftState>(emptyRoutineDraft());
@@ -110,13 +112,17 @@ export function useRoutineEditor({
         messageProviders,
         saving: savingRoutine,
         running: runningRoutine,
-        error: routineError,
+        error: routineError ?? (needsModel ? MODEL_REQUIRED_SEND_ERROR : null),
         onBack: () => setPanel("routines"),
         onClose: () => setPanel(null),
         onEnsureWebhook: async () => {
           await ensureWebhookSecret(active.id);
         },
         onSave: async () => {
+          if (needsModel && !routineDraft.modelKey) {
+            setRoutineError(MODEL_REQUIRED_SEND_ERROR);
+            return;
+          }
           if (routineSavePending.current) return;
           const targetBotId = active.id;
           const targetRoutine = editingRoutine;
@@ -241,6 +247,10 @@ export function useRoutineEditor({
           await refreshThread(targetBotId).catch(() => undefined);
         },
         onTestRun: async () => {
+          if (needsModel && !routineDraft.modelKey) {
+            setRoutineError(MODEL_REQUIRED_SEND_ERROR);
+            return;
+          }
           if (routineRunPending.current) return;
           const targetBotId = active.id;
           const targetRoutine = editingRoutine;

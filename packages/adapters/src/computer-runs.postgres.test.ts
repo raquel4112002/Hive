@@ -7,6 +7,8 @@ import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
   asSystem,
   createDb,
+  ownerThread,
+  ownerThreadArgs,
   reconcileComputerRuns,
   recordComputerRunEnd,
   recordComputerRunStart,
@@ -144,11 +146,11 @@ describePostgres("computer runs (PostgreSQL)", () => {
         name: "Waiting",
         color: "ink",
         computerId: o.id,
-        thread: { create: { spaceId: o.id, userId: o.id } },
+        threads: { create: { spaceId: o.id, userId: o.id } },
       },
-      include: { thread: true },
+      include: { threads: ownerThreadArgs },
     });
-    const threadId = bot.thread!.id;
+    const threadId = ownerThread(bot)!.id;
     const task = await system.task.create({
       data: {
         spaceId: o.id,

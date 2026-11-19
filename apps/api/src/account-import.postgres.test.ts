@@ -11,7 +11,7 @@ import type {
 import { LocalAgentHomeStore } from "@rakazo/adapters";
 import type { AccountExportRecord, Actor } from "@rakazo/contracts";
 import type { PrismaClient } from "@rakazo/db";
-import { asSystem, createDb } from "@rakazo/db";
+import { asSystem, createDb, ownerThread, ownerThreadArgs } from "@rakazo/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AccountImportError, importAccount } from "./account-import.js";
 import { buildArchive, chunked, exportFiles, manifestFor } from "./account-import.test-support.js";
@@ -407,7 +407,7 @@ describePostgres("account import (PostgreSQL)", () => {
 
     const bots = await system.bot.findMany({
       where: { spaceId },
-      include: { thread: true, computer: true },
+      include: { threads: ownerThreadArgs, computer: true },
     });
     const child = bots.find((bot) => bot.name === "Scout")!;
     const parent = bots.find((bot) => bot.name === "Chief")!;
@@ -421,7 +421,7 @@ describePostgres("account import (PostgreSQL)", () => {
     expect(child.sectionId).toBe(section.id);
     expect(child.computer).not.toBeNull();
 
-    const thread = child.thread!;
+    const thread = ownerThread(child)!
     expect(thread).toMatchObject({
       nextMessageSeq: 2,
       lastReadSeq: 1,

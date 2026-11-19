@@ -115,7 +115,7 @@ describe("finalizeRun", () => {
           updateMany: vi.fn(async () => ({ count: 0 })),
         },
         message: { findFirst: vi.fn(async () => null) },
-        bot: { update: vi.fn(async () => ({})) },
+        bot: { update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) },
       };
       const transaction = vi
         .fn()
@@ -193,7 +193,7 @@ describe("finalizeRun", () => {
           id: "message-partial",
         })),
       },
-      bot: { update: vi.fn(async () => ({})) },
+      bot: { update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) },
     };
     const prisma = {
       $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
@@ -256,7 +256,7 @@ describe("finalizeRun", () => {
         updateMany: vi.fn(async () => ({ count: 0 })),
       },
       message: { findFirst: vi.fn(async () => null), create },
-      bot: { update: vi.fn(async () => ({})) },
+      bot: { update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) },
     };
     const prisma = {
       $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
@@ -315,7 +315,7 @@ describe("finalizeRun", () => {
         updateMany: vi.fn(async () => ({ count: 1 })),
       },
       message: { findFirst: vi.fn(async () => null) },
-      bot: { update: vi.fn(async () => ({})) },
+      bot: { update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) },
     };
     const prisma = {
       $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
@@ -386,7 +386,7 @@ describe("finalizeRun", () => {
         updateMany: vi.fn(async () => ({ count: 1 })),
       },
       message: { findFirst: vi.fn(async () => null) },
-      bot: { update: vi.fn(async () => ({})) },
+      bot: { update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) },
     };
     const prisma = {
       $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
@@ -479,7 +479,7 @@ describe("finalizeRun", () => {
         updateMany: vi.fn(async () => ({ count: 1 })),
       },
       message: { findFirst: vi.fn(async () => null) },
-      bot: { update: vi.fn(async () => ({})) },
+      bot: { update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) },
     };
     const prisma = {
       $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
@@ -4436,7 +4436,7 @@ describe("clearThread", () => {
         deleteMany: vi.fn(),
         create: vi.fn().mockResolvedValue({ ...event(0), type: "thread.cleared" }),
       },
-      bot: { update: vi.fn() },
+      bot: { update: vi.fn(), updateMany: vi.fn(async () => ({ count: 1 })) },
     };
     const prisma = {
       computer: { updateMany: vi.fn().mockRejectedValue(new Error("connection lost")) },
@@ -4487,7 +4487,7 @@ describe("clearThread", () => {
           type: "thread.cleared",
         }),
       },
-      bot: { update: vi.fn() },
+      bot: { update: vi.fn(), updateMany: vi.fn(async () => ({ count: 1 })) },
     };
     const prisma = {
       computer: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },

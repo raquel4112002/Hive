@@ -12,9 +12,10 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
 } from "@rakazo/contracts";
 import { MISSING_MODEL_RUN_ERROR } from "@rakazo/core";
-import { hiveModelSource, hiveServiceBot } from "@rakazo/db";
+import { hiveModelSource, hiveServiceBot, INSTALLATION_MODEL_RECORD_ID } from "@rakazo/db";
 import { cloudflareProviderEnv } from "./cloudflare-ai-gateway.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
+import { hiveInstallationModel } from "./hive-installation-model.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import type { FleetPrepareDeps } from "./fleet-tools.js";
 import {
@@ -377,8 +378,66 @@ async function resolveModelKeyMaterial(
     });
   }
   if (requireStoredSecret) throw new Error("Backup model credential is no longer available");
+  if (provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
+    const fromEnv = hiveInstallationModel();
+    if (fromEnv) {
+      const allowPrivateEndpoint = deps.mcpAllowPrivateEndpoint === true;
+      assertAllowedOpenAiCompatibleUrl(fromEnv.baseUrl, {
+        allowPublic: true,
+        allowPrivate: allowPrivateEndpoint,
+      });
+      const redact = [fromEnv.apiKey];
+      registerSecrets?.(redact);
+      return {
+        apiKey: fromEnv.apiKey,
+        baseUrl: fromEnv.baseUrl,
+        allowPrivateEndpoint,
+        redact,
+      };
+    }
+    const installation = await installationCompatibleModel(deps);
+    if (installation?.baseUrl) {
+      assertAllowedOpenAiCompatibleUrl(installation.baseUrl, {
+        allowPublic: true,
+        allowPrivate: process.env.MCP_ALLOW_PRIVATE_ENDPOINT === "true",
+      });
+      const redact = installation.apiKey ? [installation.apiKey] : [];
+      registerSecrets?.(redact);
+      return {
+        apiKey: installation.apiKey,
+        baseUrl: installation.baseUrl,
+        apiProtocol: installation.apiProtocol,
+        headers: installation.headers,
+        reasoning: installation.reasoning,
+        maxTokens: installation.maxTokens,
+        thinkingLevel: installation.thinkingLevel,
+        redact,
+      };
+    }
+  }
   cloudflareProviderEnv({ provider });
   return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
+}
+
+async function installationCompatibleModel(
+  deps: ExecutorDeps,
+): Promise<Extract<StoredModelSecret, { kind: "openai_compatible" }> | null> {
+  if (typeof deps.prisma.deploymentSettings?.findUnique !== "function") return null;
+  if (typeof deps.secretStore?.load !== "function") return null;
+  const settings = await deps.prisma.deploymentSettings.findUnique({
+    where: { id: "default" },
+    select: { deploymentModelCredentialCipher: true, defaultModelProvider: true },
+  });
+  const cipher = settings?.deploymentModelCredentialCipher;
+  if (!cipher || settings?.defaultModelProvider !== OPENAI_COMPATIBLE_PROVIDER_ID) return null;
+  try {
+    const plain = await deps.secretStore.load(cipher, INSTALLATION_MODEL_RECORD_ID);
+    const secret = parseModelSecret(plain);
+    if (secret.kind !== "openai_compatible" || !secret.baseUrl?.trim()) return null;
+    return secret;
+  } catch {
+    return null;
+  }
 }
 
 export function cloudflareRunFields(resolved: { accountId?: string; gatewayId?: string }): {

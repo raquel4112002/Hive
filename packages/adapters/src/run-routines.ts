@@ -12,7 +12,7 @@ import {
   isOneShotRoutineCrons,
   nextRoutineRunDateAcross,
 } from "@rakazo/core";
-import { ensureRoutineThread, IsolationError } from "@rakazo/db";
+import { deliverRoutineResult, ensureRoutineThread, IsolationError } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { sanitizedError } from "@rakazo/logging/monitoring";
 import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
@@ -90,6 +90,22 @@ export async function scheduleRoutineRetry(
   }
 }
 
+export async function publishPublication(
+  deps: ExecutorDeps,
+  run: { id: string; trigger: string; routineId: string | null; botId: string; spaceId: string },
+  publication: boolean,
+  text: string,
+): Promise<void> {
+  if (run.trigger !== "routine" || !run.routineId || !publication || !text.trim()) return;
+  await deliverRoutineResult(deps.prisma, {
+    routineId: run.routineId,
+    botId: run.botId,
+    spaceId: run.spaceId,
+    text,
+    routineRunId: run.id,
+  });
+}
+
 async function notifyFailedRoutineRun(
   deps: ExecutorDeps,
   failed: Parameters<typeof notifyRun>[1] & { error: string | null },
@@ -146,10 +162,12 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
   }
   const legacyThread = routineThread
     ? null
-    : await deps.prisma.thread.findFirst({
-        where: { botId: bot.id, routineId: null },
-        select: { id: true },
-      });
+    : typeof deps.prisma.thread?.findFirst === "function"
+      ? await deps.prisma.thread.findFirst({
+          where: { botId: bot.id, userId: bot.userId, routineId: null },
+          select: { id: true },
+        })
+      : ((bot as { thread?: { id: string } | null }).thread ?? null);
   if (!routineThread && !legacyThread && !routine.threadId) return;
   const targetThread = routine.threadId
     ? await deps.prisma.thread.findFirst({
@@ -182,6 +200,40 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
           scheduledAt,
         );
   if (watchTick && !watchTick.run) return;
+  // No model is connected. Move the schedule forward without a run, so it does not fail later.
+  const installationModel =
+    routine.watch == null &&
+    !routine.modelProvider &&
+    deps.deploymentModelConfigured === false &&
+    typeof deps.prisma.deploymentSettings?.findUnique === "function"
+      ? await deps.prisma.deploymentSettings.findUnique({
+          where: { id: "default" },
+          select: { defaultModelProvider: true, deploymentModelCredentialCipher: true },
+        })
+      : null;
+  if (
+    routine.watch == null &&
+    !routine.modelProvider &&
+    deps.deploymentModelConfigured === false &&
+    !(installationModel?.defaultModelProvider && installationModel.deploymentModelCredentialCipher)
+  ) {
+    const postponed = isOneShotRoutineCrons(routine.crons)
+      ? null
+      : nextRoutineRunDateAcross(
+          routine.crons,
+          scheduledAt,
+          new Date(Date.now()),
+          routine.timezone,
+        );
+    const moved = await deps.prisma.routine.updateMany({
+      where: { id: routine.id, active: true, nextRunAt: scheduledAt },
+      data: { nextRunAt: postponed, ...(postponed ? {} : { active: false }) },
+    });
+    if (moved.count === 1 && postponed) {
+      await deps.jobs.enqueue(routineWakeupJob(routine.id, postponed));
+    }
+    return;
+  }
   // A schedule with no valid parseable cron among its crons (e.g. a
   // legacy row accepted before cron validation was added) fires the
   // already-due run once, then nextRunAt stays null and the routine
@@ -196,9 +248,12 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
           new Date(Date.now()),
           routine.timezone,
         );
+  // A Hive routine runs as the service account that owns the bot. The person who
+  // created or tested it is not the account the run acts as.
+  const runUserId = routineThread ? bot.userId : routine.userId;
   const skillRecords = await listAgentSkillRecords(deps.prisma, {
     spaceId: routine.spaceId,
-    userId: routine.userId,
+    userId: runUserId,
   });
   const routinePrompt =
     expandSkillReferencesInPrompt(routine.prompt, skillRecords) +
@@ -232,7 +287,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         routineId: routine.id,
         spaceId: routine.spaceId,
         botId: bot.id,
-        userId: routine.userId,
+        userId: runUserId,
         threadId: thread.id,
         prompt: routinePrompt,
         ...routineRunModelPin(currentModel),
@@ -250,7 +305,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         spaceId: routine.spaceId,
         botId: bot.id,
         threadId: thread.id,
-        userId: routine.userId,
+        userId: runUserId,
         prompt: routinePrompt,
         status: "queued",
       },
@@ -261,7 +316,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         botId: bot.id,
         threadId: thread.id,
         taskId: task.id,
-        userId: routine.userId,
+        userId: runUserId,
         status: "queued",
         trigger: "routine",
         routineId: routine.id,

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
+import { ownerThreadArgs } from "./canonical-thread.js";
 import { asSystem, runAsTenant } from "./row-security.js";
 import { countUnreadInboxChats } from "./unread-inbox-chats.js";
 
@@ -82,9 +83,9 @@ describePostgres("unread inbox chat count (PostgreSQL)", () => {
         name: "Fixture",
         color: "blue",
         archivedAt: archived ? new Date() : null,
-        thread: { create: { spaceId, userId: owner, unread } },
+        threads: { create: { spaceId, userId: owner, unread } },
       },
-      include: { thread: true },
+      include: { threads: ownerThreadArgs },
     });
   }
 

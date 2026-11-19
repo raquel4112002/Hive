@@ -60,7 +60,9 @@ export async function provisionMessagingIdentity(
   const where = { provider_address: { provider, address } } as const;
   const existing = await prisma.messagingIdentity.findUnique({ where });
   if (existing) {
-    const thread = await prisma.thread.findFirst({ where: { botId: existing.botId } });
+    const thread = await prisma.thread.findFirst({
+      where: { botId: existing.botId, userId: existing.userId, routineId: null },
+    });
     if (!thread) throw new Error(`messaging identity ${existing.id} has no thread`);
     return {
       provider,
@@ -125,7 +127,9 @@ export async function provisionMessagingIdentity(
     botId = bot.id;
   }
 
-  const thread = await prisma.thread.findFirst({ where: { botId } });
+  const thread = await prisma.thread.findFirst({
+    where: { botId, userId: user.id, routineId: null },
+  });
   if (!thread) throw new Error(`bot ${botId} has no thread after createBot`);
 
   try {
@@ -150,7 +154,9 @@ export async function provisionMessagingIdentity(
     const winnerThread =
       winner.botId === botId
         ? thread
-        : await prisma.thread.findFirst({ where: { botId: winner.botId } });
+        : await prisma.thread.findFirst({
+            where: { botId: winner.botId, userId: winner.userId, routineId: null },
+          });
     if (!winnerThread) throw new Error(`bot ${winner.botId} has no thread`);
     return {
       provider,

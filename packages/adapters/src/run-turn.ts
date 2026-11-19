@@ -37,6 +37,7 @@ import {
   clearRoutineBackoff,
   modelAccountRefusal,
 } from "./routine-backoff.js";
+import { publishPublication } from "./run-routines.js";
 import type { RunContext } from "./run-context.js";
 import { persistTurnCheckpoint } from "./run-context.js";
 import { renewRunLease, requeueComputerRun } from "./run-lifecycle.js";
@@ -781,6 +782,11 @@ export async function completeRun(ctx: RunContext) {
   ctx.stopHeartbeatAfterCompletion();
   if (run.trigger === "routine" && run.routineId) {
     await clearRoutineBackoff(deps, run.routineId);
+    if (!completed.continuationRunId) {
+      await publishPublication(deps, run, bot.publication, text).catch((error) =>
+        getLogger().error("hive publication", error),
+      );
+    }
   }
   const { screenRelease } = ctx.state.computerUse;
   if (screenRelease) screenRelease.keepWarm = true;

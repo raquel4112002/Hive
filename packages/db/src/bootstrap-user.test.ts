@@ -5,6 +5,8 @@ import type { PrismaClient } from "./client.js";
 function makePrisma(settings: { id: string; ownerUserId: string | null } | null) {
   const create = () => vi.fn(async (_input: { data: Record<string, unknown> }) => ({}));
   const prisma = {
+    $queryRaw: vi.fn(async () => [{ bypass: "off" }]),
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
     organization: {
       create: create(),
       findUniqueOrThrow: vi.fn(async () => {
@@ -26,6 +28,16 @@ function makePrisma(settings: { id: string; ownerUserId: string | null } | null)
     },
     memoryDocument: { findFirst: vi.fn(async () => null), create: create() },
     notificationPreference: { create: create() },
+    hiveRole: {
+      findUnique: vi.fn(async () => null),
+      count: vi.fn(async () => 0),
+      create: create(),
+    },
+    department: {
+      findFirst: vi.fn(async () => null),
+      create: vi.fn(async (_input: { data: Record<string, unknown> }) => ({ id: "todos-1" })),
+    },
+    departmentMember: { create: create() },
   };
   return prisma;
 }
@@ -68,6 +80,24 @@ describe("bootstrapUserSpace", () => {
         userId: "user-1",
       }),
     );
+    expect(prisma.hiveRole.create.mock.calls[0]![0].data).toEqual(
+      expect.objectContaining({
+        organizationId: orgData.id,
+        userId: "user-1",
+        role: "SUPER_ADMIN",
+      }),
+    );
+    expect(prisma.department.create.mock.calls[0]![0].data).toEqual(
+      expect.objectContaining({
+        organizationId: orgData.id,
+        name: "Todos",
+        system: true,
+      }),
+    );
+    expect(prisma.departmentMember.create.mock.calls[0]![0].data).toEqual({
+      departmentId: "todos-1",
+      userId: "user-1",
+    });
   });
 
   it("seeds deployment settings from the env policy when none exist", async () => {
@@ -119,6 +149,8 @@ describe("bootstrapUserSpace concurrency", () => {
       throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
     };
     const prisma = {
+      $queryRaw: vi.fn(async () => [{ bypass: "off" }]),
+      $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
       organization: {
         create: vi.fn(uniqueViolation),
         findUniqueOrThrow: vi.fn(async () => ({ id: "org-winner" })),
@@ -138,6 +170,16 @@ describe("bootstrapUserSpace concurrency", () => {
         create: vi.fn(async () => ({})),
       },
       notificationPreference: { create: vi.fn(uniqueViolation) },
+      hiveRole: {
+        findUnique: vi.fn(async () => null),
+        count: vi.fn(async () => 0),
+        create: vi.fn(async () => ({})),
+      },
+      department: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async (_input: { data: Record<string, unknown> }) => ({ id: "todos-1" })),
+      },
+      departmentMember: { create: vi.fn(async () => ({})) },
     };
     const result = await bootstrapUserSpace(
       prisma as unknown as PrismaClient,

@@ -2,7 +2,7 @@
 
 # Fase 2 — papéis e atribuições
 
-Especificação da Fase 2. O código e as migrações da conta de serviço, dos papéis, das threads, das rotinas, das ligações, da remoção e dos computadores seguem este documento. A área Todos, o nível de acesso e os bots de publicação estão descritos aqui e ainda não têm código.
+Especificação da Fase 2. O código e as migrações seguem este documento. A área Todos, o nível de acesso e os bots de publicação entram na migração `20261112140000_hive_publication`.
 
 O Rakazo trata cada conta como dona dos bots que criou. `listBots` e `getBot`
 filtram `spaceId` e `userId` do ator. `Thread.botId` é único: um bot, uma
@@ -218,15 +218,15 @@ A migração, por causa dos dois releases lado a lado:
 2. O código novo procura a thread por (`botId`, `userId`) e, se não
    existir, cria a dessa pessoa. Não lê a thread de outra pessoa quando o
    único antigo ainda recusa a segunda linha.
-3. No mesmo PR, uma migração com `-- deferred` na primeira linha remove
-   `threads_botId_key`. Só corre no deploy seguinte, quando já ninguém do
-   release anterior faz `findUnique` por `botId`.
-4. O único antigo de `memory_documents` sai pelo mesmo caminho, deferred,
+3. A migração `20261112130000_hive_drop_shared_thread` remove
+   `threads_botId_key` nesta release. As consultas passam a usar
+   (`botId`, `userId`) para a conversa de uma pessoa e `routineId` para a
+   thread da conta de serviço.
+4. O único antigo de `memory_documents` sai numa migração `-- deferred`,
    depois de existir o único com `userId`.
 
-Até o drop deferred correr, a segunda pessoa do mesmo bot ainda não abre
-conversa: a API recusa em vez de a juntar à thread que já existe. Não há
-janela em que as duas pessoas leiam o mesmo transcript.
+A segunda pessoa do mesmo bot abre a sua conversa. Não há janela em que as
+duas pessoas leiam o mesmo transcript.
 
 ## Rotinas
 
@@ -236,8 +236,7 @@ resultado: pessoas, uma área, ou as duas. Cada destinatário recebe o
 resultado na sua thread. Duas pessoas da mesma área não leem o resultado
 numa thread partilhada.
 
-Enquanto o único antigo `threads_botId_key` existir, a segunda thread é
-recusada. A rotina não reutiliza a thread de uma pessoa.
+A rotina não reutiliza a thread de uma pessoa, nem a de quem carregou em testar.
 
 Num bot de publicação o resultado não segue este caminho. Vai para o feed,
 como a secção do bot de publicação descreve.
@@ -574,3 +573,11 @@ o papel `rakazo_app` e `app.user_id` / `app.space_id` de cada um.
 - Outro `USER` sem atribuição não vê as publicações, nem por `SELECT` em
   `bot_posts`.
 - A publicação não aparece em nenhuma thread pessoal.
+
+## Verificação
+
+O modelo de teste é `qwen3.5:2b`, servido pelo Ollama no computador anfitrião pelo endpoint compatível com OpenAI. O endereço, a chave e o nome do modelo vêm de `HIVE_MODEL_BASE_URL`, `HIVE_MODEL_API_KEY` e `HIVE_DEFAULT_MODEL`. A partir do Compose no Docker Desktop o endereço é `http://host.docker.internal:11434/v1`, com `MCP_ALLOW_PRIVATE_ENDPOINT=true`. Ollama não valida a chave; o cliente envia uma na mesma. Apontar os mesmos três valores para o LiteLLM chega para a fase seguinte.
+
+Duas pessoas com `CHAT` no Desk enviaram uma mensagem e receberam resposta desse modelo. Cada uma vê só a sua conversa. O admin, também em Todos com `CHAT`, tem caixa no Desk. A rotina Daily do Bulletin criou um `BotPost`. O admin e as duas pessoas veem o mesmo post. O Bulletin não tem caixa nem threads pessoais. As duas pessoas recebem 404 ao enviar para o Bulletin, ao criar um bot e ao testar a rotina. As chamadas, incluindo ferramentas, terminaram sem erro.
+
+`pnpm test` no Windows falha em casos que não são da Fase 2: sockets de controlo em `\tmp\rk-control` com `EACCES`, scripts que invocam `sh` e deploys feitos para Unix, e workers de teste que esgotam o tempo. A mesma suite no commit anterior à Fase 2 falha nesses ficheiros. `events.test.ts` passou a usar `updateMany` e foi alinhado. A suite do servidor corre em Linux.

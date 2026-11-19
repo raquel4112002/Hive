@@ -2,6 +2,7 @@ import type { JobPublisher } from "@rakazo/adapter-kit";
 import { runContinueJob } from "@rakazo/adapter-kit";
 import { isTicketCompletedStatus, TicketStatusSchema } from "@rakazo/contracts";
 import type { PrismaClient } from "@rakazo/db";
+import { ownerThread, ownerThreadArgs } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 
 /** Assignment wakes only its current owner, without posting a chat message. */
@@ -20,14 +21,15 @@ export async function wakeTicketAssignee(
     if (!status.success || isTicketCompletedStatus(status.data)) return null;
     const bot = await tx.bot.findFirst({
       where: { id: input.botId, spaceId: input.spaceId, archivedAt: null },
-      select: { id: true, userId: true, thread: { select: { id: true } } },
+      select: { id: true, userId: true, threads: { ...ownerThreadArgs, select: { id: true } } },
     });
-    if (!bot?.thread) return null;
+    const thread = bot ? ownerThread(bot) : null;
+    if (!bot || !thread) return null;
     const task = await tx.task.create({
       data: {
         spaceId: input.spaceId,
         botId: bot.id,
-        threadId: bot.thread.id,
+        threadId: thread.id,
         userId: bot.userId,
         prompt: `Work on ticket ${ticket.board.ticketPrefix}-${ticket.number}. Read it with ticket_get. Keep progress in ticket comments and update its status with ticket_update. Use ask or approval cards when user input is needed.`,
         status: "queued",
@@ -37,7 +39,7 @@ export async function wakeTicketAssignee(
       data: {
         spaceId: input.spaceId,
         botId: bot.id,
-        threadId: bot.thread.id,
+        threadId: thread.id,
         userId: bot.userId,
         taskId: task.id,
         trigger: "tickets",

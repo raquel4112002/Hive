@@ -498,13 +498,8 @@ describe("createRepos.listSpaceBotsForSpaces", () => {
       },
     ]);
     const query = findMany.mock.calls[0]![0];
-    expect(query.select.thread).toEqual(
-      expect.objectContaining({
-        select: expect.not.objectContaining({
-          messages: expect.anything(),
-        }),
-      }),
-    );
+    expect(query.select).not.toHaveProperty("thread");
+    expect(query.select).not.toHaveProperty("threads");
     expect(query.where).toEqual(
       expect.objectContaining({ spaceId: { in: ["ws-2"] }, userId: actor.userId }),
     );

@@ -2,6 +2,28 @@
 // Derived from Rakazo (Apache License 2.0).
 
 export type HiveRoleName = "SUPER_ADMIN" | "ADMIN" | "USER";
+export type HiveAccessLevel = "CHAT" | "READ_ONLY";
+
+export const EVERYONE_DEPARTMENT_NAME = "Todos";
+
+/** The highest assignment wins. One CHAT path is enough. */
+export function effectiveAccess(levels: readonly HiveAccessLevel[]): HiveAccessLevel | null {
+  if (levels.includes("CHAT")) return "CHAT";
+  if (levels.includes("READ_ONLY")) return "READ_ONLY";
+  return null;
+}
+
+/** A person thread exists only for CHAT on a bot that is not a publication. */
+export function conversationAllowed(input: {
+  access: HiveAccessLevel | null;
+  publication: boolean;
+}): boolean {
+  return input.access === "CHAT" && !input.publication;
+}
+
+export function asAccessLevel(value: string): HiveAccessLevel {
+  return value === "READ_ONLY" ? "READ_ONLY" : "CHAT";
+}
 
 /** Routes a USER cannot call. Conversation on their own thread stays open. */
 export const HIVE_USER_BLOCKED = new Set([
@@ -111,6 +133,8 @@ export const HIVE_USER_BLOCKED = new Set([
   "models.list",
   "models.credentials",
   "hive.linkConnection",
+  "hive.assignDepartment",
+  "hive.setPublication",
 ]);
 
 export function userMayCall(role: HiveRoleName | null, procedure: string): boolean {
@@ -172,6 +196,9 @@ export function routineDeliveries(userIds: readonly string[]): { userId: string 
 export function delegationAllowed(assignedBotIds: readonly string[], targetBotId: string): boolean {
   return assignedBotIds.includes(targetBotId);
 }
+
+/** AAD record id for the installation model sealed in DeploymentSettings. */
+export const INSTALLATION_MODEL_RECORD_ID = "deployment-model";
 
 export function hiveModelSource(
   isServiceBot: boolean,

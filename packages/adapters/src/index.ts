@@ -59,6 +59,7 @@ export * from "./cursor-cloud-agent.js";
 export * from "./daytona-sandbox.js";
 export * from "./decision-models.js";
 export * from "./deployment-model.js";
+export * from "./hive-installation-model.js";
 export * from "./desktop-sandbox.js";
 export * from "./destination-emulator.js";
 export * from "./docker-sandbox.js";

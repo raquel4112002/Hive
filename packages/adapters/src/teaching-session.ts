@@ -18,6 +18,8 @@ import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   IsolationError,
+  ownerThread,
+  ownerThreadArgs,
 } from "@rakazo/db";
 import { revokeScreenControl } from "./computer-control.js";
 import { scheduleComputerSleep } from "./computer-idle.js";
@@ -233,10 +235,11 @@ async function finalizeTeachingRecording(
     });
     // The stopped event must commit with the status flip; appended afterwards it is lost for
     // good when the process dies in between, because retries see a draft and skip it.
-    const bot = await tx.bot.findUnique({
+    const loadedBot = await tx.bot.findUnique({
       where: { id: skill.botId },
-      include: { thread: true },
+      include: { threads: ownerThreadArgs },
     });
+    const bot = loadedBot ? { ...loadedBot, thread: ownerThread(loadedBot) } : null;
     let stopped: { threadId: string; seq: number } | null = null;
     if (bot?.thread) {
       const event = await appendEventInTransaction(tx, {
@@ -446,11 +449,12 @@ export async function completeTeachingSession(
     reason,
     stopSnapshot,
   );
-  const bot = await deps.prisma.bot.findUnique({
+  const loadedBot = await deps.prisma.bot.findUnique({
     where: { id: finalized.botId },
-    include: { thread: true, computer: true },
+    include: { threads: ownerThreadArgs, computer: true },
   });
-  if (!bot) throw new IsolationError();
+  if (!loadedBot) throw new IsolationError();
+  const bot = { ...loadedBot, thread: ownerThread(loadedBot) };
   await releaseTeachingComputerControlForBot(
     deps,
     actor,
@@ -475,11 +479,16 @@ export async function expireTaughtSkillTeaching(
     const leaseId = parseRecording(skill.recording).controlLeaseId;
     if (leaseId) await releaseTeachingComputerControlForBot(deps, actor, skill.botId, leaseId);
     if (skill.status === "draft") {
-      const bot = await deps.prisma.bot.findUnique({
+      const loadedBot = await deps.prisma.bot.findUnique({
         where: { id: skill.botId },
-        include: { thread: true },
+        include: { threads: ownerThreadArgs },
       });
-      if (bot) await emitSkillDraftMessages(deps, actor, skill, bot);
+      if (loadedBot) {
+        await emitSkillDraftMessages(deps, actor, skill, {
+          ...loadedBot,
+          thread: ownerThread(loadedBot),
+        });
+      }
     }
     return skill;
   }
@@ -488,7 +497,7 @@ export async function expireTaughtSkillTeaching(
   }
   const bot = await deps.prisma.bot.findUnique({
     where: { id: skill.botId },
-    include: { thread: true, computer: true },
+    include: { threads: ownerThreadArgs, computer: true },
   });
   if (!bot) return skill;
   const stopSnapshot = bot.computer?.providerRef

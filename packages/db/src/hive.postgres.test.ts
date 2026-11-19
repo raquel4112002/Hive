@@ -1,14 +1,24 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { bootstrapUserSpace } from "./bootstrap-user.js";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
 import {
   assignBotDepartment,
+  assignBotUser,
+  deleteHiveDepartment,
   deliverRoutineResult,
+  effectiveAccessFor,
+  ensureEveryoneDepartment,
+  ensureMemberRole,
+  ensureRoutineThread,
   ensureUserThread,
   inspectConversation,
   linkBotConnection,
+  listBotPosts,
   removeHivePerson,
+  renameHiveDepartment,
   requestDedicatedComputer,
+  setBotPublication,
 } from "./hive.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { createRepos } from "./repos.js";
@@ -131,7 +141,7 @@ describePostgres("hive access (PostgreSQL)", () => {
     expect(admin[0]?.preview).toBe("");
   });
 
-  it("gives the first person a thread and refuses to share it with the second", async () => {
+  it("keeps two people on the same bot in private threads", async () => {
     const first = await runAsTenant(actor(userA), () =>
       ensureUserThread(prisma, actor(userA), botId),
     );
@@ -144,9 +154,25 @@ describePostgres("hive access (PostgreSQL)", () => {
         }),
       ),
     );
-    await expect(
-      runAsTenant(actor(userB), () => ensureUserThread(prisma, actor(userB), botId)),
-    ).rejects.toBeInstanceOf(IsolationError);
+    const second = await runAsTenant(actor(userB), () =>
+      ensureUserThread(prisma, actor(userB), botId),
+    );
+    expect(second.id).not.toBe(first.id);
+    await runAsSystem("hive message b", () =>
+      prisma.$transaction((tx) =>
+        createThreadMessageInTransaction(tx, {
+          threadId: second.id,
+          role: "user",
+          blocks: [{ kind: "text", text: "from-b" }],
+        }),
+      ),
+    );
+    const listedA = await runAsTenant(actor(userA), () => createRepos(prisma).listBots(actor(userA)));
+    const listedB = await runAsTenant(actor(userB), () => createRepos(prisma).listBots(actor(userB)));
+    expect(listedA.map((bot) => bot.preview)).toContain("secret");
+    expect(listedB.map((bot) => bot.preview)).toContain("from-b");
+    expect(listedB.map((bot) => bot.preview).join(" ")).not.toContain("secret");
+    expect(listedA.map((bot) => bot.preview).join(" ")).not.toContain("from-b");
     const seenByB = await runAsTenant(actor(userB), () =>
       prisma.message.findMany({ where: { threadId: first.id } }),
     );
@@ -247,21 +273,6 @@ describePostgres("hive access (PostgreSQL)", () => {
     await runAsSystem("hive recipients", () =>
       prisma.routineRecipient.create({ data: { routineId: routine.id, departmentId } }),
     );
-    const shared = await prisma.$queryRaw<Array<{ present: boolean }>>`
-      SELECT EXISTS (
-        SELECT 1 FROM pg_indexes WHERE indexname = 'threads_botId_key'
-      ) AS present
-    `;
-    if (shared[0]?.present) {
-      await expect(
-        deliverRoutineResult(prisma, { routineId: routine.id, botId, spaceId, text: "done" }),
-      ).rejects.toBeInstanceOf(IsolationError);
-      const threads = await runAsSystem("hive threads", () =>
-        prisma.thread.findMany({ where: { botId }, select: { userId: true } }),
-      );
-      expect(threads.map((thread) => thread.userId)).toEqual([userA]);
-      return;
-    }
     const delivered = await deliverRoutineResult(prisma, {
       routineId: routine.id,
       botId,
@@ -269,5 +280,185 @@ describePostgres("hive access (PostgreSQL)", () => {
       text: "done",
     });
     expect(delivered).toEqual([userA, userB].sort());
+    const seenByB = await runAsTenant(actor(userB), () =>
+      prisma.message.findMany({
+        where: { thread: { botId, userId: userB, routineId: null } },
+        select: { blocks: true },
+      }),
+    );
+    const texts = seenByB.map((message) => JSON.stringify(message.blocks));
+    expect(texts.some((text) => text.includes("done"))).toBe(true);
+    expect(texts.some((text) => text.includes("secret"))).toBe(false);
+    const routineThread = await runAsSystem("hive routine thread", () =>
+      ensureRoutineThread(prisma, { routineId: routine.id, botId, spaceId }),
+    );
+    const personal = await runAsSystem("hive personal threads", () =>
+      prisma.thread.findMany({
+        where: { botId, userId: { in: [userA, userB] }, routineId: null },
+        select: { id: true },
+      }),
+    );
+    expect(routineThread?.userId).toBe(serviceId);
+    expect(personal.map((thread) => thread.id)).not.toContain(routineThread?.id);
+  });
+
+  it("assigns Todos to both people and refuses to rename or delete it", async () => {
+    const everyoneId = await ensureEveryoneDepartment(prisma, organizationId);
+    const feedBot = `${botId}-todos`;
+    await runAsSystem("hive todos bot", () =>
+      prisma.bot.create({
+        data: { id: feedBot, spaceId, userId: serviceId, name: "Todos bot", color: "#111111" },
+      }),
+    );
+    await assignBotDepartment(prisma, actor(superId), feedBot, everyoneId, "CHAT");
+    const listedA = await runAsTenant(actor(userA), () => createRepos(prisma).listBots(actor(userA)));
+    const listedB = await runAsTenant(actor(userB), () => createRepos(prisma).listBots(actor(userB)));
+    expect(listedA.map((bot) => bot.id)).toContain(feedBot);
+    expect(listedB.map((bot) => bot.id)).toContain(feedBot);
+    await expect(deleteHiveDepartment(prisma, actor(superId), everyoneId)).rejects.toBeInstanceOf(
+      IsolationError,
+    );
+    await expect(
+      renameHiveDepartment(prisma, actor(superId), everyoneId, "Other"),
+    ).rejects.toBeInstanceOf(IsolationError);
+    const still = await runAsSystem("hive todos still", () =>
+      prisma.department.findUnique({ where: { id: everyoneId }, select: { name: true } }),
+    );
+    expect(still?.name).toBe("Todos");
+  });
+
+  it("lets a chat area win over a read-only direct assignment", async () => {
+    await assignBotUser(prisma, actor(superId), botId, userA, "READ_ONLY");
+    expect(await effectiveAccessFor(prisma, userA, botId)).toBe("CHAT");
+  });
+
+  it("keeps a publication in the feed and out of personal threads", async () => {
+    const feedBot = `${botId}-feed`;
+    await runAsSystem("hive feed bot", () =>
+      prisma.bot.create({
+        data: {
+          id: feedBot,
+          spaceId,
+          userId: serviceId,
+          name: "Feed",
+          color: "#111111",
+          publication: true,
+        },
+      }),
+    );
+    await setBotPublication(prisma, actor(superId), feedBot, true);
+    const everyone = await runAsSystem("hive everyone id", () =>
+      prisma.department.findFirst({
+        where: { organizationId, system: true },
+        select: { id: true },
+      }),
+    );
+    if (!everyone) throw new Error("Todos is missing");
+    await assignBotDepartment(prisma, actor(superId), feedBot, everyone.id, "READ_ONLY");
+    const outsider = `hive-out-${suffix}`;
+    await runAsSystem("hive outsider", async () => {
+      await prisma.user.create({
+        data: { id: outsider, name: "Out", email: `${outsider}@example.com`, emailVerified: true },
+      });
+      await prisma.hiveRole.create({ data: { organizationId, userId: outsider, role: "USER" } });
+    });
+    const routine = await runAsSystem("hive feed routine", () =>
+      prisma.routine.create({
+        data: {
+          spaceId,
+          botId: feedBot,
+          userId: serviceId,
+          name: "Publish",
+          prompt: "publish",
+          crons: [],
+          notify: false,
+        },
+      }),
+    );
+    await deliverRoutineResult(prisma, {
+      routineId: routine.id,
+      botId: feedBot,
+      spaceId,
+      text: "published",
+      artifacts: [{ name: "note.txt", body: "hello" }],
+    });
+    const visible = await runAsTenant(actor(userA), () => listBotPosts(prisma, feedBot));
+    expect(visible.map((post) => post.content)).toEqual(["published"]);
+    expect(visible[0]?.artifacts.map((artifact) => artifact.name)).toEqual(["note.txt"]);
+    await expect(
+      runAsTenant(actor(userA), () => ensureUserThread(prisma, actor(userA), feedBot)),
+    ).rejects.toBeInstanceOf(IsolationError);
+    const hidden = await runAsTenant(actor(outsider), () =>
+      prisma.botPost.findMany({ where: { botId: feedBot } }),
+    );
+    expect(hidden).toEqual([]);
+    const threads = await runAsSystem("hive feed threads", () =>
+      prisma.thread.findMany({ where: { botId: feedBot, routineId: null } }),
+    );
+    expect(threads).toEqual([]);
+    await runAsSystem("hive feed cleanup", async () => {
+      await prisma.botPost.deleteMany({ where: { botId: feedBot } });
+      await prisma.user.deleteMany({ where: { id: outsider } });
+    });
+  });
+
+  it("creates a super admin with the organization and keeps a later member a user", async () => {
+    const founderId = `f${suffix}`;
+    const joinerId = `j${suffix}`;
+    await runAsSystem("hive signup users", async () => {
+      await prisma.user.create({
+        data: { id: founderId, name: "Founder", email: `${founderId}@example.com`, emailVerified: true },
+      });
+      await prisma.user.create({
+        data: { id: joinerId, name: "Joiner", email: `${joinerId}@example.com`, emailVerified: true },
+      });
+    });
+    const { spaceId: founded } = await bootstrapUserSpace(
+      prisma,
+      { id: founderId },
+      { signupsEnabled: "true", signupAllowlist: "" },
+    );
+    const founder = await runAsSystem("hive founder role", () =>
+      prisma.hiveRole.findUnique({
+        where: { organizationId_userId: { organizationId: founded, userId: founderId } },
+      }),
+    );
+    expect(founder?.role).toBe("SUPER_ADMIN");
+    const todos = await runAsSystem("hive founder todos", () =>
+      prisma.department.findFirst({
+        where: { organizationId: founded, system: true },
+        select: { id: true, name: true },
+      }),
+    );
+    expect(todos?.name).toBe("Todos");
+    const founderMembership = await runAsSystem("hive founder area", () =>
+      prisma.departmentMember.findUnique({
+        where: { departmentId_userId: { departmentId: todos!.id, userId: founderId } },
+      }),
+    );
+    expect(founderMembership).not.toBeNull();
+    await runAsSystem("hive join", async () => {
+      await prisma.member.create({
+        data: {
+          id: `member-${joinerId}`,
+          organizationId: founded,
+          userId: joinerId,
+          role: "member",
+          createdAt: new Date(),
+        },
+      });
+    });
+    const joined = await ensureMemberRole(prisma, { userId: joinerId, spaceId: founded });
+    expect(joined?.role).toBe("USER");
+    const joinerMembership = await runAsSystem("hive joiner area", () =>
+      prisma.departmentMember.findUnique({
+        where: { departmentId_userId: { departmentId: todos!.id, userId: joinerId } },
+      }),
+    );
+    expect(joinerMembership).not.toBeNull();
+    await runAsSystem("hive signup cleanup", async () => {
+      await prisma.organization.deleteMany({ where: { id: founded } });
+      await prisma.user.deleteMany({ where: { id: { in: [founderId, joinerId] } } });
+    });
   });
 });
