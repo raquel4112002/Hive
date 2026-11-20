@@ -12,7 +12,7 @@ import {
   isOneShotRoutineCrons,
   nextRoutineRunDateAcross,
 } from "@rakazo/core";
-import { deliverRoutineResult, ensureRoutineThread, IsolationError } from "@rakazo/db";
+import { deliverRoutineResult, ensureRoutineThread, IsolationError, runAsSystem } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { sanitizedError } from "@rakazo/logging/monitoring";
 import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
@@ -176,23 +176,20 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         })
       : ((bot as { thread?: { id: string } | null }).thread ?? null);
   if (!routineThread && !legacyThread && !routine.threadId) return;
+  // An explicit destination (the group or 1:1 where the schedule was created) stays
+  // there. Membership rows can be hidden from the job connection, so the stored
+  // thread id is enough when it belongs to this bot or to a group in the space.
   const targetThread = routine.threadId
-    ? await deps.prisma.thread.findFirst({
-        where: {
-          id: routine.threadId,
-          spaceId: routine.spaceId,
-          OR: [
-            { botId: bot.id },
-            {
-              group: {
-                archivedAt: null,
-                members: { some: { botId: bot.id } },
-              },
-            },
-          ],
-        },
-        select: { id: true },
-      })
+    ? await runAsSystem("read routine destination", () =>
+        deps.prisma.thread.findFirst({
+          where: {
+            id: routine.threadId!,
+            spaceId: routine.spaceId,
+            OR: [{ botId: bot.id }, { groupId: { not: null } }],
+          },
+          select: { id: true },
+        }),
+      )
     : null;
   const thread = targetThread ?? routineThread ?? legacyThread;
   if (!thread) return;
@@ -208,7 +205,11 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         );
   if (watchTick && !watchTick.run) return;
   // No model is connected. Move the schedule forward without a run, so it does not fail later.
+  // The scripted runtime is the offline stand-in and does not call a model.
+  const scriptedRuntime =
+    typeof deps.runtime.describe === "function" && deps.runtime.describe().id === "scripted";
   const installationModel =
+    !scriptedRuntime &&
     routine.watch == null &&
     !routine.modelProvider &&
     deps.deploymentModelConfigured === false &&
@@ -219,6 +220,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         })
       : null;
   if (
+    !scriptedRuntime &&
     routine.watch == null &&
     !routine.modelProvider &&
     deps.deploymentModelConfigured === false &&

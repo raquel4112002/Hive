@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { runJobKey } from "@rakazo/adapter-kit";
+import { runContinueJob, runJobKey } from "@rakazo/adapter-kit";
 import {
   ComposioConnector,
   createScheduleFromTool,
@@ -18,6 +18,7 @@ import type { createApp } from "@rakazo/api/app";
 import type { MessageBlock } from "@rakazo/contracts";
 import { ACTIVE_RUN_STATUSES, ONCE_ROUTINE_CRON } from "@rakazo/core";
 import {
+  answerRunInput,
   appendEvent,
   createThreadEvents,
   createThreadMessage,
@@ -1276,14 +1277,24 @@ describeJourneys("required product journeys", () => {
       name: "routine.wakeup",
       payload: { routineId: routine.id, scheduledFor: dueAt.toISOString() },
     });
-    const snap = await waitFor(app, cookie, bot.id, (s) =>
-      s.messages.some(
-        (m) =>
-          JSON.stringify(m.blocks).includes("routine-ok") ||
-          JSON.stringify(m.blocks).includes("writing"),
-      ),
-    );
-    expect(snap.messages.length).toBeGreaterThan(0);
+    if (await botIsServiceOwned(prisma, bot.id)) {
+      // The organization bot runs on its service thread. The person's conversation
+      // receives the result only when the run finishes and delivery copies it.
+      const seen = await waitForServiceRoutine(prisma, routine.id, (blocks) => {
+        const text = JSON.stringify(blocks);
+        return text.includes("routine-ok") || text.includes("writing");
+      });
+      expect(seen).toBe(true);
+    } else {
+      const snap = await waitFor(app, cookie, bot.id, (s) =>
+        s.messages.some(
+          (m) =>
+            JSON.stringify(m.blocks).includes("routine-ok") ||
+            JSON.stringify(m.blocks).includes("writing"),
+        ),
+      );
+      expect(snap.messages.length).toBeGreaterThan(0);
+    }
     const routineRuns = await prisma.run.count({
       where: { botId: bot.id, trigger: "routine" },
     });
@@ -2941,20 +2952,49 @@ describeJourneys("required product journeys", () => {
     const tested = await rpc<{ runId: string }>(app, cookie, "routines/testRun", {
       routineId: routine.id,
     });
-    const waiting = await waitFor(
-      app,
-      cookie,
-      bot.id,
-      (snap) => snap.run?.status === "waiting_input",
-    );
-    expect(connector.records).toHaveLength(recordsBefore);
-    await answerPendingApproval(app, cookie, bot.id, tested.runId, "allow", waiting);
-    await waitFor(
-      app,
-      cookie,
-      bot.id,
-      (snap) => !snap.run || ["completed", "failed", "cancelled"].includes(snap.run.status),
-    );
+    const me = await rpc<Me>(app, cookie, "me");
+    if (await botIsServiceOwned(prisma, bot.id)) {
+      const thread = await waitForRoutineThread(prisma, routine.id);
+      const run = await waitForRunStatus(prisma, tested.runId, "waiting_input");
+      expect(run.threadId).toBe(thread.id);
+      expect(connector.records).toHaveLength(recordsBefore);
+      const messages = await prisma.message.findMany({
+        where: { threadId: thread.id, runId: tested.runId },
+        select: { id: true, blocks: true },
+      });
+      const card = messages.find((message) =>
+        JSON.stringify(message.blocks).includes("approvalEffectId"),
+      );
+      if (!card) throw new Error(`run ${tested.runId} did not expose an approval card`);
+      const answered = await runAsSystem("answer organization routine", () =>
+        answerRunInput(appPrisma, {
+          spaceId: me.spaceId,
+          threadId: thread.id,
+          runId: tested.runId,
+          messageId: card.id,
+          answeredByUserId: me.userId,
+          answer: "allow",
+        }),
+      );
+      expect(answered).toBe(true);
+      await jobs.enqueue(runContinueJob(tested.runId));
+      await waitForRunStatus(prisma, tested.runId, "completed", "failed", "cancelled");
+    } else {
+      const waiting = await waitFor(
+        app,
+        cookie,
+        bot.id,
+        (snap) => snap.run?.status === "waiting_input",
+      );
+      expect(connector.records).toHaveLength(recordsBefore);
+      await answerPendingApproval(app, cookie, bot.id, tested.runId, "allow", waiting);
+      await waitFor(
+        app,
+        cookie,
+        bot.id,
+        (snap) => !snap.run || ["completed", "failed", "cancelled"].includes(snap.run.status),
+      );
+    }
     expect(connector.records.length).toBeGreaterThan(recordsBefore);
   });
 
@@ -4086,6 +4126,104 @@ async function answerPendingApproval(
     messageId: message.id,
     answer,
   });
+}
+
+async function botIsServiceOwned(
+  db: {
+    bot: {
+      findUnique(args: {
+        where: { id: string };
+        select: { userId: true };
+      }): Promise<{ userId: string } | null>;
+    };
+    user: {
+      findUnique(args: {
+        where: { id: string };
+        select: { hiveService: true };
+      }): Promise<{ hiveService: boolean } | null>;
+    };
+  },
+  botId: string,
+): Promise<boolean> {
+  const bot = await db.bot.findUnique({ where: { id: botId }, select: { userId: true } });
+  if (!bot) return false;
+  const owner = await db.user.findUnique({
+    where: { id: bot.userId },
+    select: { hiveService: true },
+  });
+  return owner?.hiveService === true;
+}
+
+async function waitForRoutineThread(
+  db: {
+    thread: {
+      findFirst(args: {
+        where: { routineId: string };
+        select: { id: true };
+      }): Promise<{ id: string } | null>;
+    };
+  },
+  routineId: string,
+): Promise<{ id: string }> {
+  const start = Date.now();
+  while (Date.now() - start < 20_000) {
+    const thread = await db.thread.findFirst({
+      where: { routineId },
+      select: { id: true },
+    });
+    if (thread) return thread;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`timeout waiting for the service routine thread ${routineId}`);
+}
+
+async function waitForServiceRoutine(
+  db: {
+    thread: {
+      findFirst(args: {
+        where: { routineId: string };
+        include: { messages: { select: { blocks: true } } };
+      }): Promise<{ messages: Array<{ blocks: unknown }> } | null>;
+    };
+  },
+  routineId: string,
+  pred: (blocks: unknown) => boolean,
+): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < 20_000) {
+    const thread = await db.thread.findFirst({
+      where: { routineId },
+      include: { messages: { select: { blocks: true } } },
+    });
+    if (thread?.messages.some((message) => pred(message.blocks))) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
+async function waitForRunStatus(
+  db: {
+    run: {
+      findUnique(args: {
+        where: { id: string };
+        select: { status: true; threadId: true };
+      }): Promise<{ status: string; threadId: string } | null>;
+    };
+  },
+  runId: string,
+  ...statuses: string[]
+): Promise<{ status: string; threadId: string }> {
+  const start = Date.now();
+  let last: { status: string; threadId: string } | null = null;
+  while (Date.now() - start < 20_000) {
+    last = await db.run.findUnique({
+      where: { id: runId },
+      select: { status: true, threadId: true },
+    });
+    if (last && statuses.includes(last.status)) return last;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`timeout waiting for run ${runId}: ${JSON.stringify(last)}`);
 }
 
 async function waitFor(app: App, cookie: string, botId: string, pred: (snap: Snap) => boolean) {

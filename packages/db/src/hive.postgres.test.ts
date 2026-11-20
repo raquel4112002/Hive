@@ -302,6 +302,31 @@ describePostgres("hive access (PostgreSQL)", () => {
     expect(personal.map((thread) => thread.id)).not.toContain(routineThread?.id);
   });
 
+  it("leaves a personal bot routine on that person's own thread", async () => {
+    const personalBot = `${botId}-personal`;
+    const routine = await runAsSystem("personal bot routine", () =>
+      prisma.$transaction(async (tx) => {
+        await tx.bot.create({
+          data: { id: personalBot, spaceId, userId: userA, name: "Personal", color: "#222222" },
+        });
+        return tx.routine.create({
+          data: {
+            spaceId,
+            botId: personalBot,
+            userId: userA,
+            name: "Own",
+            prompt: "Note",
+            crons: [],
+          },
+        });
+      }),
+    );
+    const thread = await runAsSystem("personal routine thread", () =>
+      ensureRoutineThread(prisma, { routineId: routine.id, botId: personalBot, spaceId }),
+    );
+    expect(thread).toBeNull();
+  });
+
   it("assigns Todos to both people and refuses to rename or delete it", async () => {
     const everyoneId = await ensureEveryoneDepartment(prisma, organizationId);
     const feedBot = `${botId}-todos`;
