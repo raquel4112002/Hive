@@ -461,4 +461,61 @@ describePostgres("hive access (PostgreSQL)", () => {
       await prisma.user.deleteMany({ where: { id: { in: [founderId, joinerId] } } });
     });
   });
+
+  it("lets the document owner write a memory revision and hides it from everyone else", async () => {
+    const person = await runAsTenant(actor(userA), () =>
+      prisma.memoryDocument.create({
+        data: {
+          spaceId,
+          userId: userA,
+          scope: "user",
+          path: `notes-${suffix}.md`,
+          content: "a",
+        },
+      }),
+    );
+    const revision = await runAsTenant(actor(userA), () =>
+      prisma.memoryRevision.create({
+        data: { documentId: person.id, revision: 1, content: "a1" },
+      }),
+    );
+    expect(revision.revision).toBe(1);
+    await expect(
+      runAsTenant(actor(userB), () =>
+        prisma.memoryRevision.create({
+          data: { documentId: person.id, revision: 2, content: "stolen" },
+        }),
+      ),
+    ).rejects.toThrow(/row-level security policy/);
+    expect(
+      await runAsTenant(actor(userB), () =>
+        prisma.memoryRevision.findMany({ where: { documentId: person.id } }),
+      ),
+    ).toEqual([]);
+
+    const service = await runAsTenant(actor(serviceId), () =>
+      prisma.memoryDocument.create({
+        data: {
+          spaceId,
+          userId: serviceId,
+          botId,
+          scope: "bot",
+          path: `MEMORY-${suffix}.md`,
+          content: "service",
+        },
+      }),
+    );
+    await expect(
+      runAsTenant(actor(serviceId), () =>
+        prisma.memoryRevision.create({
+          data: { documentId: service.id, revision: 1, content: "service-1" },
+        }),
+      ),
+    ).resolves.toMatchObject({ revision: 1 });
+    expect(
+      await runAsTenant(actor(userA), () =>
+        prisma.memoryRevision.findMany({ where: { documentId: service.id } }),
+      ),
+    ).toEqual([]);
+  });
 });

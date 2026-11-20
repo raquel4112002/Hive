@@ -116,7 +116,9 @@ describe.skipIf(!enabled)("send model gate with a bot's own model (PostgreSQL)",
   };
 
   it("starts a bot's turn on its own connected model, and refuses one without it", async () => {
-    const thread = await system.thread.findFirstOrThrow({ where: { botId } });
+    const thread = await system.thread.findFirstOrThrow({
+      where: { botId, userId: actor.userId, routineId: null },
+    });
     // A bot that follows the main model is still refused.
     await expectRefused(await send({ botId, text: "follows main" }));
 

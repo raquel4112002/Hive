@@ -98,7 +98,12 @@ describeWithDatabase("structured @ mention targets", () => {
     });
     expect(second.runId).toBe(first.runId);
     const run = await prisma.run.findUniqueOrThrow({ where: { id: first.runId } });
-    expect(run.clientNonce).toBe(`routine-run:${run.userId}:${nonce}`);
+    const caller = await prisma.user.findUniqueOrThrow({
+      where: { email: `mention-routine-replay-${stamp}@rakazo.test` },
+      select: { id: true },
+    });
+    expect(run.userId).not.toBe(caller.id);
+    expect(run.clientNonce).toBe(`routine-run:${caller.id}:${nonce}`);
 
     // The previous release stored the key without the user id; its retry replays that run.
     const legacyNonce = `routine-mention:${stamp}:legacy`;

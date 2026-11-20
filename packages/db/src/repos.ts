@@ -677,6 +677,23 @@ export function createRepos(
                 userId: ownerId,
               },
             });
+            if (ownerId !== actor.userId) {
+              await tx.botAssignment.create({
+                data: {
+                  botId: created.id,
+                  userId: actor.userId,
+                  assignedByUserId: actor.userId,
+                  accessLevel: "CHAT",
+                },
+              });
+              await tx.thread.create({
+                data: {
+                  spaceId: actor.spaceId,
+                  botId: created.id,
+                  userId: actor.userId,
+                },
+              });
+            }
             if (input.initialMessage) {
               await createThreadMessageInTransaction(tx, {
                 threadId: thread.id,
@@ -766,7 +783,13 @@ export function createRepos(
           }
         }
       }
-      return mapBot({ ...bot, thread: ownerThread(bot) });
+      const conversation =
+        ownerId === actor.userId
+          ? ownerThread(bot)
+          : await prisma.thread.findFirst({
+              where: { botId: bot.id, userId: actor.userId, routineId: null },
+            });
+      return mapBot({ ...bot, thread: conversation ?? ownerThread(bot) });
     },
 
     async reorderBots(actor: Actor, botIds: string[]): Promise<void> {

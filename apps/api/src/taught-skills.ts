@@ -42,6 +42,7 @@ import type { createRepos, PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
   clearEndedRunState,
   expireComputerExecutionLeases,
+  botsWhereForActor,
   IsolationError,
   ownerThread,
   ownerThreadArgs,
@@ -328,12 +329,17 @@ export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
 
     async start(actor: Actor, botId: string, goal: string): Promise<TaughtSkill> {
       const loaded = await deps.prisma.bot.findFirst({
-        where: { id: botId, spaceId: actor.spaceId, userId: actor.userId },
+        where: {
+          AND: [await botsWhereForActor(deps.prisma, actor, false), { id: botId }],
+        },
         include: { threads: ownerThreadArgs, computer: true },
       });
       if (!loaded) throw new IsolationError();
       const { threads, ...rest } = loaded;
-      let bot = { ...rest, thread: threads[0] ?? null };
+      const personThread = await deps.prisma.thread.findFirst({
+        where: { botId, userId: actor.userId, routineId: null },
+      });
+      let bot = { ...rest, thread: personThread ?? threads[0] ?? null };
       const alreadyRecording = await deps.prisma.taughtSkill.findFirst({
         where: { botId, status: "recording" },
         select: { id: true },

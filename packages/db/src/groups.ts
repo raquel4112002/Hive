@@ -6,6 +6,7 @@ import type { Prisma, PrismaClient } from "./client.js";
 import { expireComputerExecutionLeases, restoreBotUnderComputerQuota } from "./computers.js";
 import { transientRunEventsWhere } from "./events.js";
 import { withNewestThreadMessages } from "./preview-messages.js";
+import { botsWhereForActor } from "./hive.js";
 import { IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import {
@@ -113,10 +114,7 @@ async function assertOwnedBots(
   }
   const bots = await prisma.bot.findMany({
     where: {
-      id: { in: unique },
-      spaceId: actor.spaceId,
-      userId: actor.userId,
-      archivedAt: null,
+      AND: [await botsWhereForActor(prisma, actor, false), { id: { in: unique } }],
     },
     select: { id: true, name: true, color: true, avatarSet: true },
   });

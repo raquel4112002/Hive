@@ -156,8 +156,19 @@ describeIntegration("agent import", () => {
       where: { id: anyBot.id },
       select: { spaceId: true, userId: true },
     });
+    const person = await db.user.findUniqueOrThrow({
+      where: { email: `import-${stamp}@rakazo.test` },
+      select: { id: true },
+    });
     const spaceUser = await db.memoryDocument.create({
-      data: { ...owner, scope: "user", botId: null, path: "USER.md", content: "Existing.\n" },
+      data: {
+        spaceId: owner.spaceId,
+        userId: person.id,
+        scope: "user",
+        botId: null,
+        path: "USER.md",
+        content: "Existing.\n",
+      },
     });
 
     const plan = await rpc<AgentImportPlan>(app, cookie, "bots/importPreview", {
@@ -210,7 +221,13 @@ describeIntegration("agent import", () => {
     ]);
 
     const spaceMemory = await db.memoryDocument.findMany({
-      where: { ...owner, scope: "user", botId: null, path: { in: ["USER.md", "USER-2.md"] } },
+      where: {
+        spaceId: owner.spaceId,
+        userId: person.id,
+        scope: "user",
+        botId: null,
+        path: { in: ["USER.md", "USER-2.md"] },
+      },
       include: { revisions: true },
       orderBy: { path: "asc" },
     });
@@ -220,12 +237,17 @@ describeIntegration("agent import", () => {
     ]);
     expect(spaceMemory.find((doc) => doc.path === "USER.md")?.id).toBe(spaceUser.id);
 
-    const skills = await db.agentSkill.findMany({ where: owner, orderBy: { name: "asc" } });
+    const skills = await db.agentSkill.findMany({
+      where: { spaceId: owner.spaceId, userId: person.id },
+      orderBy: { name: "asc" },
+    });
     expect(skills.map((row) => row.name)).toEqual(["weekly-review", "weekly-review-2"]);
     expect(skills[0]!.content).toBe(existingSkill.content);
     expect(skills.some((row) => row.name === "watering")).toBe(false);
     expect(
-      await db.memoryDocument.count({ where: { ...owner, path: "memory/2026-01-02.md" } }),
+      await db.memoryDocument.count({
+        where: { spaceId: owner.spaceId, userId: person.id, path: "memory/2026-01-02.md" },
+      }),
     ).toBe(0);
   });
 

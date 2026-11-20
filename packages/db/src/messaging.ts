@@ -4,6 +4,7 @@ import type { SignupPolicyEnv } from "./bootstrap-user.js";
 import { bootstrapUserSpace } from "./bootstrap-user.js";
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
+import { serviceAccountId } from "./hive-access.js";
 import { createRepos } from "./repos.js";
 
 export interface MessagingIdentityRequest {
@@ -60,8 +61,10 @@ export async function provisionMessagingIdentity(
   const where = { provider_address: { provider, address } } as const;
   const existing = await prisma.messagingIdentity.findUnique({ where });
   if (existing) {
-    const thread = await prisma.thread.findFirst({
-      where: { botId: existing.botId, userId: existing.userId, routineId: null },
+    const thread = await messagingConversation(prisma, {
+      botId: existing.botId,
+      userId: existing.userId,
+      spaceId: existing.spaceId,
     });
     if (!thread) throw new Error(`messaging identity ${existing.id} has no thread`);
     return {
@@ -97,17 +100,30 @@ export async function provisionMessagingIdentity(
   const membership = await prisma.spaceMember.findFirst({ where: { userId: user.id } });
   const spaceId = membership?.spaceId ?? (await bootstrapUserSpace(prisma, user, env)).spaceId;
 
-  // A previous attempt may have died between createBot and the identity row;
-  // messaging users only ever get bots here, so an existing bot is theirs.
-  let botId = (
-    await prisma.bot.findFirst({
-      where: { spaceId, userId: user.id, archivedAt: null },
-      select: { id: true },
-    })
-  )?.id;
-  if (!botId) {
+  // A previous attempt may have died between createBot and the identity row.
+  // The person's own bot is theirs. In Hive the bot belongs to the service
+  // account, and this space's oldest service bot is the one this flow created.
+  let bot = await prisma.bot.findFirst({
+    where: { spaceId, userId: user.id, archivedAt: null },
+    select: { id: true, userId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!bot) {
+    const space = await prisma.space.findUnique({
+      where: { id: spaceId },
+      select: { organizationId: true },
+    });
+    if (space) {
+      bot = await prisma.bot.findFirst({
+        where: { spaceId, userId: serviceAccountId(space.organizationId), archivedAt: null },
+        select: { id: true, userId: true },
+        orderBy: { createdAt: "asc" },
+      });
+    }
+  }
+  if (!bot) {
     const repos = createRepos(prisma);
-    const bot = await repos.createBot(
+    bot = await repos.createBot(
       {
         userId: user.id,
         spaceId,
@@ -124,11 +140,14 @@ export async function provisionMessagingIdentity(
         notifyOnFinish: true,
       },
     );
-    botId = bot.id;
   }
+  const botId = bot.id;
 
-  const thread = await prisma.thread.findFirst({
-    where: { botId, userId: user.id, routineId: null },
+  const thread = await messagingConversation(prisma, {
+    botId,
+    userId: user.id,
+    spaceId,
+    ownerUserId: bot.userId,
   });
   if (!thread) throw new Error(`bot ${botId} has no thread after createBot`);
 
@@ -154,8 +173,10 @@ export async function provisionMessagingIdentity(
     const winnerThread =
       winner.botId === botId
         ? thread
-        : await prisma.thread.findFirst({
-            where: { botId: winner.botId, userId: winner.userId, routineId: null },
+        : await messagingConversation(prisma, {
+            botId: winner.botId,
+            userId: winner.userId,
+            spaceId: winner.spaceId,
           });
     if (!winnerThread) throw new Error(`bot ${winner.botId} has no thread`);
     return {
@@ -169,6 +190,42 @@ export async function provisionMessagingIdentity(
     };
   }
   return { provider, address, userId: user.id, spaceId, botId, threadId: thread.id, created: true };
+}
+
+/**
+ * The person's conversation with this bot. Hive stores the bot on the service
+ * account and the birth thread on that account, so the person's thread is a
+ * second row keyed by (botId, userId). A bot the person owns already has that
+ * row from createBot.
+ */
+async function messagingConversation(
+  prisma: PrismaClient,
+  input: { botId: string; userId: string; spaceId: string; ownerUserId?: string | null },
+) {
+  const where = { botId: input.botId, userId: input.userId, routineId: null } as const;
+  const found = await prisma.thread.findFirst({ where });
+  if (found) return found;
+  const ownerUserId =
+    input.ownerUserId ??
+    (typeof prisma.bot?.findUnique === "function"
+      ? (
+          await prisma.bot.findUnique({
+            where: { id: input.botId },
+            select: { userId: true },
+          })
+        )?.userId
+      : null);
+  if (!ownerUserId || ownerUserId === input.userId || typeof prisma.thread.create !== "function") {
+    return null;
+  }
+  return prisma.thread
+    .create({
+      data: { spaceId: input.spaceId, botId: input.botId, userId: input.userId },
+    })
+    .catch((error: unknown) => {
+      if (!isUniqueViolationError(error)) throw error;
+      return prisma.thread.findFirst({ where });
+    });
 }
 
 function titleCase(value: string): string {

@@ -153,6 +153,15 @@ export const ROW_SECURITY_MODELS: ReadonlySet<string> = new Set([
   "AuditEvent",
   "BotPost",
   "BotPostArtifact",
+  "HiveRole",
+  "Department",
+  "DepartmentMember",
+  "BotAssignment",
+  "BotDepartmentAssignment",
+  "BotConnection",
+  "RoutineRecipient",
+  "BotUserComputer",
+  "ConversationGrant",
 ]);
 
 /**

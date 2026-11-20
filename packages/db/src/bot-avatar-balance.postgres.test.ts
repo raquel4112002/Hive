@@ -69,7 +69,7 @@ describePostgres("new bot avatars (PostgreSQL)", () => {
     const repos = createRepos(prisma);
     const system = asSystem(prisma);
     const before = await system.bot.findMany({
-      where: { spaceId: owner.spaceId, userId: owner.userId },
+      where: { spaceId: owner.spaceId, archivedAt: null },
       select: { id: true, color: true },
     });
 
@@ -151,7 +151,7 @@ describePostgres("new bot avatars (PostgreSQL)", () => {
         color: first.color,
       });
       const system = asSystem(prisma);
-      expect(await system.thread.count({ where: { botId: id } })).toBe(1);
+      expect(await system.thread.count({ where: { botId: id } })).toBe(2);
       await system.bot.update({ where: { id }, data: { archivedAt: new Date() } });
       await expect(runAsTenant(owner, () => repos.createBot(actor(), input))).rejects.toThrow();
       expect(await system.bot.findUnique({ where: { id } })).toMatchObject({

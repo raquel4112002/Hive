@@ -3,7 +3,7 @@ import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
 import { ownerThread, ownerThreadArgs } from "./canonical-thread.js";
 import { issueMessagingLinkCode, provisionMessagingIdentity } from "./messaging.js";
-import { asSystem, runAsSystem } from "./row-security.js";
+import { asSystem, runAsSystem, runAsTenant } from "./row-security.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =
@@ -82,9 +82,43 @@ describePostgres("provisionMessagingIdentity (PostgreSQL)", () => {
     );
     expect(bot).toBeTruthy();
     expect(bot!.spaceId).toBe(result.spaceId);
-    expect(bot!.userId).toBe(result.userId);
-    expect(ownerThread(bot!)).toBeTruthy();
-    expect(result.threadId).toBe(ownerThread(bot!)!.id);
+    const service = await asSystem(prisma).user.findUnique({
+      where: { id: bot!.userId },
+      select: { hiveService: true },
+    });
+    expect(service?.hiveService).toBe(true);
+    expect(bot!.userId).not.toBe(result.userId);
+    const birth = ownerThread(bot!);
+    expect(birth?.userId).toBe(bot!.userId);
+    const personThread = await asSystem(prisma).thread.findFirst({
+      where: { botId: result.botId, userId: result.userId, routineId: null },
+    });
+    expect(personThread?.id).toBe(result.threadId);
+    expect(result.threadId).not.toBe(birth?.id);
+    const otherId = `msg-other-${result.userId.slice(0, 12)}`;
+    await asSystem(prisma).user.create({
+      data: {
+        id: otherId,
+        name: "Other",
+        email: `${otherId}@example.com`,
+        emailVerified: true,
+      },
+    });
+    await asSystem(prisma).hiveRole.create({
+      data: { organizationId: result.spaceId, userId: otherId, role: "USER" },
+    });
+    const hidden = await runAsTenant(
+      {
+        userId: otherId,
+        spaceId: result.spaceId,
+        email: `${otherId}@example.com`,
+        isDeploymentOwner: false,
+      },
+      () => prisma.thread.findMany({ where: { botId: result.botId } }),
+    );
+    expect(hidden).toEqual([]);
+    await asSystem(prisma).hiveRole.deleteMany({ where: { userId: otherId } });
+    await asSystem(prisma).user.deleteMany({ where: { id: otherId } });
 
     const identity = await asSystem(prisma).messagingIdentity.findUnique({
       where: { provider_address: { provider, address } },
@@ -100,11 +134,19 @@ describePostgres("provisionMessagingIdentity (PostgreSQL)", () => {
     // bootstrap parity: same surrounding rows the auth signup hook creates
     const memories = await runAsSystem("test fixture", () =>
       prisma.memoryDocument.findMany({
-        where: { spaceId: result.spaceId, userId: result.userId },
+        where: { spaceId: result.spaceId },
       }),
     );
-    expect(memories.some((m) => m.scope === "user" && m.path === "MEMORY.md")).toBe(true);
-    expect(memories.some((m) => m.scope === "bot" && m.botId === result.botId)).toBe(true);
+    expect(
+      memories.some(
+        (m) => m.scope === "user" && m.path === "MEMORY.md" && m.userId === result.userId,
+      ),
+    ).toBe(true);
+    expect(
+      memories.some(
+        (m) => m.scope === "bot" && m.botId === result.botId && m.userId === bot!.userId,
+      ),
+    ).toBe(true);
     const pref = await asSystem(prisma).notificationPreference.findFirst({
       where: { spaceId: result.spaceId, userId: result.userId },
     });
@@ -158,7 +200,7 @@ describePostgres("provisionMessagingIdentity (PostgreSQL)", () => {
       });
       expect(identity).toBeTruthy();
       const bots = await asSystem(prisma).bot.findMany({
-        where: { spaceId: result.spaceId, userId: result.userId },
+        where: { spaceId: result.spaceId, archivedAt: null },
       });
       expect(bots).toHaveLength(1);
 
@@ -186,9 +228,10 @@ describePostgres("provisionMessagingIdentity (PostgreSQL)", () => {
       expect(second.spaceId).toBe(first.spaceId);
       expect(second.botId).toBe(first.botId);
       const bots = await asSystem(prisma).bot.findMany({
-        where: { spaceId: first.spaceId, userId: first.userId },
+        where: { spaceId: first.spaceId, archivedAt: null },
       });
       expect(bots).toHaveLength(1);
+      expect(bots[0]?.id).toBe(first.botId);
     } finally {
       await asSystem(prisma).messagingIdentity.deleteMany({
         where: { provider, address: partialAddress },

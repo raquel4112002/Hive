@@ -264,7 +264,7 @@ export function connectionsRoutes(ctx: RouterContext) {
       }),
       list: authed.connections.list.handler(async ({ context }) => {
         const rows = await deps.prisma.connection.findMany({
-          where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
+          where: { spaceId: context.actor.spaceId, userId: await hiveConnectionOwnerId(deps.prisma, context.actor) },
         });
         return rows.map((row) => ({
           id: row.id,
@@ -355,7 +355,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                 where: {
                   id: row.id,
                   spaceId: context.actor.spaceId,
-                  userId: context.actor.userId,
+                  userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                   status: "pending",
                 },
                 data: {
@@ -430,7 +430,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                     const kept = await tx.connection.findMany({
                       where: {
                         spaceId: context.actor.spaceId,
-                        userId: context.actor.userId,
+                        userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                         connectorId: input.connectorId,
                         provider: input.provider,
                         status: { in: ["connected", "pending", "error"] },
@@ -464,7 +464,7 @@ export function connectionsRoutes(ctx: RouterContext) {
             where: {
               id: row.id,
               spaceId: context.actor.spaceId,
-              userId: context.actor.userId,
+              userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
               status: "pending",
             },
             data: { status: "error" },
@@ -486,7 +486,7 @@ export function connectionsRoutes(ctx: RouterContext) {
           where: {
             id: input.connectionId,
             spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
+            userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
           },
         });
         if (!existing) throw new IsolationError();
@@ -526,7 +526,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                 where: {
                   id: existing.id,
                   spaceId: context.actor.spaceId,
-                  userId: context.actor.userId,
+                  userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                 },
               });
               if (!current) throw new IsolationError();
@@ -552,7 +552,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                     where: {
                       id: current.id,
                       spaceId: context.actor.spaceId,
-                      userId: context.actor.userId,
+                      userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                       status: "revoked",
                     },
                     data: { status: "pending" },
@@ -587,7 +587,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                       const kept = await tx.connection.findMany({
                         where: {
                           spaceId: context.actor.spaceId,
-                          userId: context.actor.userId,
+                          userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                           connectorId: existing.connectorId,
                           provider: existing.provider,
                           status: { in: ["connected", "pending", "error"] },
@@ -665,7 +665,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                 const siblings = await tx.connection.findMany({
                   where: {
                     spaceId: context.actor.spaceId,
-                    userId: context.actor.userId,
+                    userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                     connectorId: existing.connectorId,
                     provider: existing.provider,
                     id: { not: existing.id },
@@ -708,7 +708,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                 const taken = await tx.connection.findFirst({
                   where: {
                     spaceId: context.actor.spaceId,
-                    userId: context.actor.userId,
+                    userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                     connectorId: existing.connectorId,
                     provider: existing.provider,
                     id: { not: existing.id },
@@ -745,7 +745,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                 where: {
                   id: current.id,
                   spaceId: context.actor.spaceId,
-                  userId: context.actor.userId,
+                  userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                 },
               });
               if (!next) throw new IsolationError();
@@ -778,7 +778,7 @@ export function connectionsRoutes(ctx: RouterContext) {
           where: {
             id: input.connectionId,
             spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
+            userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
           },
         });
         if (!existing) throw new IsolationError();
@@ -806,7 +806,7 @@ export function connectionsRoutes(ctx: RouterContext) {
           where: {
             id: input.connectionId,
             spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
+            userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
           },
         });
         const needsProvider =
@@ -816,7 +816,7 @@ export function connectionsRoutes(ctx: RouterContext) {
           (await deps.prisma.connection.count({
             where: {
               spaceId: context.actor.spaceId,
-              userId: context.actor.userId,
+              userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
               connectorId: snapshot.connectorId,
               provider: snapshot.provider,
               id: { not: snapshot.id },
@@ -841,7 +841,7 @@ export function connectionsRoutes(ctx: RouterContext) {
               where: {
                 id: input.connectionId,
                 spaceId: context.actor.spaceId,
-                userId: context.actor.userId,
+                userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
               },
             });
             if (!row) {
@@ -854,11 +854,12 @@ export function connectionsRoutes(ctx: RouterContext) {
             // Advisory lock covers inserts as well as existing rows. SELECT FOR UPDATE
             // alone misses a concurrent begin that inserts after the lock query.
             await lockProviderConnectionScope(tx, context.actor, row.connectorId, row.provider);
+            const ownerId = await hiveConnectionOwnerId(deps.prisma, context.actor);
             await tx.$queryRaw`
               SELECT id
               FROM connections
               WHERE "spaceId" = ${context.actor.spaceId}
-                AND "userId" = ${context.actor.userId}
+                AND "userId" = ${ownerId}
                 AND "connectorId" = ${row.connectorId}
                 AND provider = ${row.provider}
                 AND status IN ('connected', 'pending', 'error')
@@ -868,7 +869,7 @@ export function connectionsRoutes(ctx: RouterContext) {
               where: {
                 id: row.id,
                 spaceId: context.actor.spaceId,
-                userId: context.actor.userId,
+                userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                 status: { in: ["connected", "pending", "error"] },
               },
               data: { status: "revoked" },
@@ -883,7 +884,7 @@ export function connectionsRoutes(ctx: RouterContext) {
             const remaining = await tx.connection.count({
               where: {
                 spaceId: context.actor.spaceId,
-                userId: context.actor.userId,
+                userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                 connectorId: row.connectorId,
                 provider: row.provider,
                 status: { in: ["connected", "pending"] },
@@ -961,7 +962,7 @@ export function connectionsRoutes(ctx: RouterContext) {
               where: {
                 id: input.connectionId,
                 spaceId: context.actor.spaceId,
-                userId: context.actor.userId,
+                userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
                 status: "revoked",
               },
               data: { status: outcome.previousStatus },
@@ -1005,7 +1006,7 @@ export function connectionsRoutes(ctx: RouterContext) {
         const row = await deps.prisma.connection.findFirst({
           where: {
             spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
+            userId: await hiveConnectionOwnerId(deps.prisma, context.actor),
             connectorId: input.connectorId,
             provider: input.provider,
             status: "connected",

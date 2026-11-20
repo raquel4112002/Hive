@@ -344,7 +344,20 @@ async function deliverRoutineResultAsSystem(
   const departmentMembers = departmentIds.length
     ? await prisma.departmentMember.findMany({ where: { departmentId: { in: departmentIds } } })
     : [];
-  const userIds = routineRecipientUserIds({ recipients, departmentMembers });
+  let userIds = routineRecipientUserIds({ recipients, departmentMembers });
+  if (userIds.length === 0) {
+    const routine = await prisma.routine.findUnique({
+      where: { id: input.routineId },
+      select: { userId: true, notify: true },
+    });
+    const owner = routine
+      ? await prisma.user.findUnique({
+          where: { id: routine.userId },
+          select: { hiveService: true },
+        })
+      : null;
+    if (routine?.notify && owner && !owner.hiveService) userIds = [routine.userId];
+  }
   const delivered: string[] = [];
   for (const userId of userIds) {
     const thread = await ensureUserThread(prisma, { userId, spaceId: input.spaceId }, input.botId);

@@ -244,7 +244,7 @@ async function fanOutToPeers(
       if (!(await crossSpaceCommunicationAllowed(deps.prisma, identity.botId, peerIdentity.botId)))
         continue;
       const peerThread = await deps.prisma.thread.findFirst({
-        where: { botId: peerIdentity.botId },
+        where: { botId: peerIdentity.botId, userId: peerIdentity.userId, routineId: null },
       });
       if (!peerThread) continue;
       const peerBot = await deps.prisma.bot.findUnique({

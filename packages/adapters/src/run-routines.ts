@@ -96,7 +96,14 @@ export async function publishPublication(
   publication: boolean,
   text: string,
 ): Promise<void> {
-  if (run.trigger !== "routine" || !run.routineId || !publication || !text.trim()) return;
+  if (run.trigger !== "routine" || !run.routineId || !text.trim()) return;
+  if (!publication) {
+    const routine = await deps.prisma.routine.findUnique({
+      where: { id: run.routineId },
+      select: { notify: true },
+    });
+    if (!routine?.notify) return;
+  }
   await deliverRoutineResult(deps.prisma, {
     routineId: run.routineId,
     botId: run.botId,
