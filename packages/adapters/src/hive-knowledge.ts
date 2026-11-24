@@ -144,6 +144,10 @@ export async function ingestHiveDocument(
   try {
     await storage.put(started.objectKey, [input.bytes]);
     const extracted = knowledgeFileText(input.bytes, input.fileName, input.ocr === true);
+    if ("needsOcr" in extracted) {
+      await finishHiveDocument(prisma, { id: started.id, status: "needs_ocr", error: null });
+      return { id: started.id, status: "needs_ocr", error: null };
+    }
     if ("error" in extracted) return fail(extracted.error);
     const pieces = chunkKnowledgeText(extracted.text);
     if (pieces.length === 0) return fail("This file has no text.");

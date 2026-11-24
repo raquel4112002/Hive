@@ -205,7 +205,7 @@ export async function beginHiveDocument(
 
 export async function finishHiveDocument(
   prisma: PrismaClient,
-  input: { id: string; status: "ready" | "failed"; error: string | null },
+  input: { id: string; status: "ready" | "failed" | "needs_ocr"; error: string | null },
 ): Promise<void> {
   await runAsSystem("finish hive document", () =>
     prisma.hiveKnowledgeDocument.update({

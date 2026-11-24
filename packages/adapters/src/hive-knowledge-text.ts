@@ -15,7 +15,7 @@ export function knowledgeFileText(
   bytes: Buffer,
   fileName: string,
   ocr: boolean,
-): { text: string } | { error: string } {
+): { text: string } | { error: string } | { needsOcr: true } {
   if (ocr) return { error: "OCR is not configured." };
   const name = fileName.toLowerCase();
   const text = name.endsWith(".txt") || name.endsWith(".md")
@@ -27,7 +27,10 @@ export function knowledgeFileText(
         : null;
   if (text === null) return { error: "This file type is not supported." };
   const cleaned = text.replace(/\u0000/g, "").trim();
-  if (!cleaned) return { error: "This file has no text." };
+  if (!cleaned) {
+    if (name.endsWith(".pdf") && !ocr) return { needsOcr: true };
+    return { error: "This file has no text." };
+  }
   return { text: cleaned };
 }
 

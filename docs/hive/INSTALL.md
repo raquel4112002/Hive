@@ -138,7 +138,7 @@ MinIO keeps the original files. A plain `up` does not start it. Start it with th
 docker compose --env-file .env -f infra/compose/docker-compose.yml --profile knowledge up -d minio
 ```
 
-The public MinIO registries no longer allow an anonymous pull, so the service uses the Chainguard MinIO image. It is the MinIO server. Set these in `.env` and recreate the API and the worker. They stay on the server. The browser never receives them.
+The public MinIO registries no longer allow an anonymous pull, so the service uses the Chainguard MinIO image, pinned by digest `sha256:f2e56aceb4d38ad9b05c901270946e2353b19f86ba4396f25cf75b15b455b38c`. It is the MinIO server. Do not replace that pin with a floating tag. Set these in `.env` and recreate the API and the worker. They stay on the server. The browser never receives them.
 
 ```bash
 HIVE_KNOWLEDGE_ENDPOINT=http://minio:9000

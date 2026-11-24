@@ -38,6 +38,25 @@ describePostgres("knowledge permissions", () => {
   });
 
   it("hides one person's document from the other, including a direct lookup", async () => {
+    const [session] = await db.prisma.$queryRaw<
+      Array<{ user: string; bypass: boolean; forced: boolean }>
+    >`
+      SELECT current_user AS "user",
+        EXISTS (
+          SELECT 1 FROM pg_roles
+          WHERE rolname = current_user AND (rolsuper OR rolbypassrls)
+        ) AS bypass,
+        (
+          SELECT bool_and(c.relforcerowsecurity)
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public'
+            AND c.relname IN ('hive_knowledge_documents', 'hive_knowledge_chunks')
+        ) AS forced
+    `;
+    expect(session?.user).toBe(new URL(url ?? "").username);
+    expect(session?.bypass).toBe(false);
+    expect(session?.forced).toBe(true);
     await runAsSystem("seed knowledge people", async () => {
       await db.prisma.hiveRole.createMany({
         data: [

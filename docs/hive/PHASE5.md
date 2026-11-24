@@ -6,7 +6,7 @@ Um admin cria coleções e liga-as a bots. Cada documento tem uma ACL: a organiz
 
 Os ficheiros originais ficam no MinIO, perfil `knowledge`. O browser não recebe o endpoint nem as credenciais. Os pedaços e os embeddings ficam no Postgres com pgvector, 768 dimensões. O pedido de embedding vai ao LiteLLM quando `HIVE_LITELLM_BASE_URL` está definido, e ao endpoint do modelo de instalação quando o proxy está parado. O modelo é `HIVE_EMBEDDING_MODEL`.
 
-PDF, DOCX, TXT e MD entram. O OCR fica desligado: pedi-lo marca o documento como falhado com `OCR is not configured.` Apagar o documento apaga o ficheiro, os pedaços e os embeddings. Reprocessar lê o ficheiro outra vez. Um conector SharePoint ou Google Drive, com herança das permissões de origem, fica por fazer.
+PDF, DOCX, TXT e MD entram. O OCR fica desligado. Um PDF sem texto fica no estado `Needs OCR`, não falhado. Pedir OCR marca o documento como falhado com `OCR is not configured.` As tabelas de documentos e de pedaços, onde ficam os embeddings, têm `FORCE ROW LEVEL SECURITY`. O teste de corte corre com o mesmo utilizador de base de dados da aplicação. Apagar o documento apaga o ficheiro, os pedaços e os embeddings. Reprocessar lê o ficheiro outra vez. Um conector SharePoint ou Google Drive, com herança das permissões de origem, fica por fazer.
 
 Numa conversa, a pesquisa usa o utilizador dessa conversa. Num bot da organização cada pessoa só recebe o que ela pode ver. Uma rotina ou publicação da conta de serviço só usa documentos visíveis para todos os destinatários dessa publicação. Se a consulta não devolve nada, a ferramenta diz `I did not find that in the documents I can read.` e a resposta não deve nomear um documento.
 

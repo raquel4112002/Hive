@@ -21,6 +21,9 @@ describe("knowledge files", () => {
   });
 
   it("leaves OCR off and rejects an unknown type", () => {
+    expect(knowledgeFileText(Buffer.from("%PDF-1.1\n%%EOF"), "scan.pdf", false)).toEqual({
+      needsOcr: true,
+    });
     expect(knowledgeFileText(Buffer.from("scan"), "scan.pdf", true)).toEqual({
       error: "OCR is not configured.",
     });

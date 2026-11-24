@@ -18,6 +18,7 @@ function toBase64(bytes: Uint8Array): string {
 function statusLabel(status: string): string {
   if (status === "processing") return "Processing";
   if (status === "ready") return "Ready";
+  if (status === "needs_ocr") return "Needs OCR";
   return "Failed";
 }
 
