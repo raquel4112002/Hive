@@ -1,6 +1,7 @@
 // Hive modification: assign a bot to Todos. Derived from Rakazo (Apache License 2.0).
 
 import { Button, Input, Switch } from "@rakazo/ui-web";
+import { HiveBrandSettings } from "./hive-brand";
 import { HiveKnowledge } from "./hive-knowledge";
 import { useEffect, useState } from "react";
 import type { createSpaceRpc } from "../../lib/rpc";
@@ -77,6 +78,7 @@ export function HiveAssign({
 
   return (
     <div className="flex flex-col">
+      <HiveBrandSettings botId={botId} rpc={rpc} />
       <HiveKnowledge botId={botId} rpc={rpc} />
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
       <span className="text-sm">Publication</span>

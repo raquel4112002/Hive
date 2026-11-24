@@ -1,5 +1,6 @@
 // Hive modification: visible product name. Derived from Rakazo (Apache License 2.0).
 import { Trans, useLingui } from "@lingui/react/macro";
+import { hiveBrandMark, useHiveBrand } from "../lib/hive-brand";
 import {
   credentialIssue,
   MAX_PASSWORD_LENGTH,
@@ -73,13 +74,14 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const codeMode = useCode && !password;
   const codeStep = useCode && codeSent;
   const passwordFieldId = mode === "in" ? "current-password" : "new-password";
+  const brandName = useHiveBrand()?.productName || "Hive";
   const title =
     sent || codeStep ? (
       <Trans>Check your email</Trans>
     ) : mode === "in" ? (
-      <Trans>Sign in to Hive</Trans>
+      `Sign in to ${brandName}`
     ) : mode === "up" ? (
-      <Trans>Create your Hive</Trans>
+      `Create your ${brandName}`
     ) : (
       <Trans>Reset your password</Trans>
     );
@@ -554,16 +556,23 @@ export function AuthFrame({
   onSubmit: (event: React.FormEvent) => void;
   children: React.ReactNode;
 }) {
+  const brand = useHiveBrand();
+  const logo = hiveBrandMark(brand);
   return (
     <div className="flex min-h-full items-center justify-center bg-background px-6 py-16 text-foreground">
       <form onSubmit={onSubmit} className="flex w-[460px] flex-col items-center">
-        <div className="flex h-[74px] w-[74px] items-center justify-center gap-[11px] rounded-full bg-muted">
-          <span className="h-5 w-[9px] rounded-full bg-primary" />
-          <span className="h-5 w-[9px] rounded-full bg-primary" />
-        </div>
+        {logo ? (
+          <img src={logo} alt="" className="h-[74px] w-[74px] object-contain" />
+        ) : (
+          <div className="flex h-[74px] w-[74px] items-center justify-center gap-[11px] rounded-full bg-muted">
+            <span className="h-5 w-[9px] rounded-full bg-primary" />
+            <span className="h-5 w-[9px] rounded-full bg-primary" />
+          </div>
+        )}
         <h1 aria-live="polite" className="mb-9 mt-7 text-4xl font-medium tracking-tight">
           {title}
         </h1>
+        {brand?.loginText ? <p className="-mt-6 mb-9 text-center text-muted-foreground">{brand.loginText}</p> : null}
         {children}
       </form>
     </div>

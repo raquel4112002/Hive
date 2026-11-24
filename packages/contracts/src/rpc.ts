@@ -1394,6 +1394,42 @@ export const appContract = {
         }),
       )
       .output(z.object({ link: z.string(), expiresAt: z.string() })),
+    brand: oc.output(
+      z.object({
+        productName: z.string(),
+        loginText: z.string(),
+        primary: z.string().nullable(),
+        primaryForeground: z.string().nullable(),
+        primaryWarning: z.string().nullable(),
+        accent: z.string().nullable(),
+        accentForeground: z.string().nullable(),
+        accentWarning: z.string().nullable(),
+        logoLight: z.string().nullable(),
+        logoDark: z.string().nullable(),
+        favicon: z.string().nullable(),
+        avatars: z.array(z.object({ botId: Id, image: z.string() })),
+      }),
+    ),
+    saveBrand: oc
+      .input(
+        z.object({
+          productName: z.string().trim().max(80),
+          loginText: z.string().trim().max(280),
+          primary: z.string().trim().max(7),
+          accent: z.string().trim().max(7),
+        }),
+      )
+      .output(z.object({ primaryWarning: z.string().nullable(), accentWarning: z.string().nullable() })),
+    saveBrandFile: oc
+      .input(
+        z.object({
+          slot: z.enum(["logoLight", "logoDark", "favicon", "bot"]),
+          botId: Id.optional(),
+          fileName: z.string().trim().min(1).max(120),
+          body: z.string().min(1).max(800_000),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
     vaultStatus: oc.output(z.object({ sealed: z.boolean() })),
     credentials: oc.input(z.object({ botId: Id })).output(
       z.array(

@@ -1,6 +1,7 @@
 // Hive modification: shared publication feed. Derived from Rakazo (Apache License 2.0).
 
 import { useEffect, useState } from "react";
+import { hiveBrandMark, useHiveBrand } from "../../lib/hive-brand";
 import type { createSpaceRpc } from "../../lib/rpc";
 
 type Post = {
@@ -29,8 +30,16 @@ export function BotFeed({
     };
   }, [botId, rpc]);
 
+  const brand = useHiveBrand();
+  const logo = hiveBrandMark(brand);
   return (
     <div className="flex-1 overflow-y-auto px-6 py-8">
+      {brand?.productName ? (
+        <div className="mb-4 flex items-center gap-2">
+          {logo ? <img src={logo} alt="" className="size-6 object-contain" /> : null}
+          <span className="text-sm font-medium">{brand.productName}</span>
+        </div>
+      ) : null}
       {posts.map((post) => (
         <article key={post.id} className="border-b border-border py-4">
           <p className="whitespace-pre-wrap text-sm text-foreground">{post.content}</p>

@@ -18,6 +18,7 @@ import { MarkdownLinkPrompt } from "./components/markdown-link-prompt";
 import { PageLoading } from "./components/PageLoading";
 import { SubscriptionGate } from "./components/SubscriptionGate";
 import { authClient } from "./lib/auth";
+import { HiveBrandProvider } from "./lib/hive-brand";
 import { getTicketBoardEnabled, subscribeTicketBoardEnabled } from "./lib/bootstrap";
 import { syncCallIdentity } from "./lib/call-session";
 import { desktopBridge } from "./lib/desktop";
@@ -177,6 +178,7 @@ function SessionApp() {
   const user = session.data?.user;
   return (
     <QueryUserProvider value={user?.id ?? null}>
+      <HiveBrandProvider invite={searchParams.get("invite") ?? ""} signedIn={Boolean(user)}>
       <MarkdownLinkPrompt>
         <div className="h-full" data-rakazo-app-state="ready">
           <Suspense fallback={<PageLoading />}>
@@ -280,6 +282,7 @@ function SessionApp() {
           </Suspense>
         </div>
       </MarkdownLinkPrompt>
+      </HiveBrandProvider>
     </QueryUserProvider>
   );
 }

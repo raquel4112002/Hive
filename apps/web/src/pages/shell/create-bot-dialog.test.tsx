@@ -96,7 +96,7 @@ describe("CreateBotDialog", () => {
   it("sends the Rakazo preview id without an organic family", async () => {
     const onCreate = vi.fn(async (_input: CreateBotDialogInput) => undefined);
     await render(onCreate);
-    await click(button("Rakazo"));
+    await click(button("Icon"));
     await typeName("Scout");
     await click(button("Create"));
     const input = onCreate.mock.lastCall![0];
@@ -112,7 +112,7 @@ describe("CreateBotDialog", () => {
       .fn(async (_input: CreateBotDialogInput) => undefined)
       .mockRejectedValueOnce(new Error("Try again"));
     await render(onCreate);
-    await click(button("Rakazo"));
+    await click(button("Icon"));
     await click(button("Color #10B981"));
     await typeName("Scout");
     await click(button("Create"));
@@ -171,13 +171,13 @@ it("retains the preview identity and colour through rerenders, set toggles and a
     .fn(async (_input: CreateBotDialogInput) => undefined)
     .mockRejectedValueOnce(new Error("Try again"));
   await render(onCreate);
-  await click(button("Rakazo"));
+  await click(button("Icon"));
   const colour = document.querySelector(".rakazo-logo-avatar")!.getAttribute("data-color");
   await typeName("First name");
   await render(onCreate);
   expect(document.querySelector(".rakazo-logo-avatar")!.getAttribute("data-color")).toBe(colour);
   await click(button("Original"));
-  await click(button("Rakazo"));
+  await click(button("Icon"));
   await click(button("Create"));
   const first = onCreate.mock.lastCall![0];
   await typeName("Retry name");

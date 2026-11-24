@@ -2510,3 +2510,29 @@ model HiveKnowledgeAcl {
   @@index([chunkId])
   @@map("hive_knowledge_acl")
 }
+
+/// Hive modification: the name, colors, and files an organization shows.
+model HiveBrand {
+  organizationId String   @id
+  productName    String   @default("")
+  logoLightKey   String?
+  logoDarkKey    String?
+  faviconKey     String?
+  primaryColor   String?
+  accentColor    String?
+  loginText      String?
+  updatedAt      DateTime @updatedAt
+
+  @@map("hive_brands")
+}
+
+/// Hive modification: an uploaded picture for one bot.
+model HiveBotAvatar {
+  botId          String   @id
+  organizationId String
+  objectKey      String
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@map("hive_bot_avatars")
+}

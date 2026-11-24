@@ -161,3 +161,16 @@ docker run --rm -v <project>_minio:/from -v <project>_minio_backup:/to alpine ta
 ```
 
 On a clean server, create `<project>_minio_restore`, unpack the archive into it, point the MinIO service at that volume, and start it with the same access key and secret. The knowledge rules are in [PHASE5.md](PHASE5.md).
+
+## Brand
+
+Until an admin saves a brand, the portal uses these. A saved value wins.
+
+```env
+HIVE_BRAND_NAME=Hive
+HIVE_BRAND_PRIMARY=
+HIVE_BRAND_ACCENT=
+HIVE_BRAND_LOGIN_TEXT=
+```
+
+Leave the colors blank to keep the default ink. Logos, the favicon, and a bot avatar are PNG, SVG, or ICO, up to 512 KB. An SVG that contains a script is rejected. Files go to MinIO when the knowledge profile is running, and to the data directory otherwise. The brand rules are in [PHASE6.md](PHASE6.md).

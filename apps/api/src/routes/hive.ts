@@ -2,7 +2,7 @@
 // Derived from Rakazo (Apache License 2.0).
 
 import { ORPCError } from "@orpc/server";
-import { createLiteLLM, deleteHiveDocument, hiveLiteLLM, ingestHiveDocument, issueBotModelKey, listBotSpend, openKnowledgeStorage, reprocessHiveDocument, vaultHealth, writeHiveCredential } from "@rakazo/adapters";
+import { brandColor, brandObjectKey, createLiteLLM, deleteHiveDocument, hiveBrandDefaults, hiveInviteMessage, hiveLiteLLM, ingestHiveDocument, inspectBrandImage, issueBotModelKey, listBotSpend, loadHiveBrand, openKnowledgeStorage, reprocessHiveDocument, vaultHealth, writeBrandFile, writeHiveCredential } from "@rakazo/adapters";
 import {
   assignBotDepartment,
   createHiveCollection,
@@ -15,9 +15,12 @@ import {
   listHiveCollections,
   listHiveCredentials,
   listHiveDocuments,
+  readHiveBrand,
   readHiveRole,
   readBotPostArtifact,
   removeHiveCredential,
+  saveHiveBotAvatar,
+  saveHiveBrand,
   IsolationError,
   runAsSystem,
   setBotPublication,
@@ -136,7 +139,77 @@ export function hiveRoutes(ctx: RouterContext) {
           departmentIds: input.departmentIds,
           webOrigin: deps.env.webOrigin,
         });
+        const record = await readHiveBrand(deps.prisma, hive.organizationId);
+        const message = hiveInviteMessage(
+          record?.productName.trim() || hiveBrandDefaults().productName,
+          created.link,
+        );
+        await deps.email
+          ?.send({ to: input.email, subject: message.subject, text: message.text })
+          .catch(() => undefined);
         return { link: created.link, expiresAt: created.expiresAt.toISOString() };
+      }),
+      brand: authed.hive.brand.handler(async ({ context }) => {
+        const hive = await readHiveRole(deps.prisma, {
+          userId: context.actor.userId,
+          spaceId: context.actor.spaceId,
+        });
+        if (!hive || hive.archived) throw new IsolationError();
+        return loadHiveBrand(deps.prisma, hive.organizationId, true);
+      }),
+      saveBrand: authed.hive.saveBrand.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        if (input.primary && !brandColor(input.primary)) throw new ORPCError("BAD_REQUEST");
+        if (input.accent && !brandColor(input.accent)) throw new ORPCError("BAD_REQUEST");
+        const current = await readHiveBrand(deps.prisma, hive.organizationId);
+        await saveHiveBrand(deps.prisma, {
+          organizationId: hive.organizationId,
+          productName: input.productName,
+          loginText: input.loginText,
+          primaryColor: input.primary || null,
+          accentColor: input.accent || null,
+          logoLightKey: current?.logoLightKey ?? null,
+          logoDarkKey: current?.logoDarkKey ?? null,
+          faviconKey: current?.faviconKey ?? null,
+        });
+        const shown = await loadHiveBrand(deps.prisma, hive.organizationId, false);
+        return { primaryWarning: shown.primaryWarning, accentWarning: shown.accentWarning };
+      }),
+      saveBrandFile: authed.hive.saveBrandFile.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        if (input.slot === "bot" && !input.botId) throw new ORPCError("BAD_REQUEST");
+        const bytes = Buffer.from(input.body, "base64");
+        const inspected = inspectBrandImage(input.fileName, bytes);
+        if ("error" in inspected) throw new ORPCError("BAD_REQUEST", { message: inspected.error });
+        const slot = input.slot === "bot" ? `bot/${input.botId}` : input.slot;
+        const key = brandObjectKey(hive.organizationId, slot, inspected.extension);
+        if (input.slot === "bot") {
+          const bot = await deps.prisma.bot.findFirst({
+            where: { id: input.botId, spaceId: context.actor.spaceId },
+            select: { id: true },
+          });
+          if (!bot || !input.botId) throw new IsolationError();
+          await writeBrandFile(key, bytes);
+          await saveHiveBotAvatar(deps.prisma, {
+            botId: input.botId,
+            organizationId: hive.organizationId,
+            objectKey: key,
+          });
+          return { ok: true as const };
+        }
+        await writeBrandFile(key, bytes);
+        const current = await readHiveBrand(deps.prisma, hive.organizationId);
+        await saveHiveBrand(deps.prisma, {
+          organizationId: hive.organizationId,
+          productName: current?.productName ?? "",
+          loginText: current?.loginText ?? null,
+          primaryColor: current?.primaryColor ?? null,
+          accentColor: current?.accentColor ?? null,
+          logoLightKey: input.slot === "logoLight" ? key : (current?.logoLightKey ?? null),
+          logoDarkKey: input.slot === "logoDark" ? key : (current?.logoDarkKey ?? null),
+          faviconKey: input.slot === "favicon" ? key : (current?.faviconKey ?? null),
+        });
+        return { ok: true as const };
       }),
       setModel: authed.hive.setModel.handler(async ({ context, input }) => {
         const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);

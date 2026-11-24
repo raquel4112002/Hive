@@ -37,6 +37,7 @@ import {
   CodexCatalogCache,
   ComposioConnector,
   contentKeyProviderFromEnv,
+  loadHiveBrand,
   migrateHiveVault,
   vaultHealth,
   createAgentHomeStore,
@@ -127,6 +128,7 @@ import {
   pushSessionExpiresAt,
   requireMembership,
   rowSecurityWarning,
+  hiveInviteOrganization,
   runAsSystem,
   securityEventRetentionDays,
   verifyContentKeys,
@@ -856,6 +858,29 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       nativePasskeys: nativePasskeys(env, auth.passkeyRpId),
       crispWebsiteId: billing ? (env.crispWebsiteId ?? null) : null,
     } satisfies AuthCapabilities);
+  });
+  app.get("/api/hive/brand", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    let organizationId: string | null = null;
+    if (session?.user.id) {
+      const role = await runAsSystem("hive brand session", () =>
+        prisma.hiveRole.findFirst({
+          where: { userId: session.user.id },
+          select: { organizationId: true },
+        }),
+      );
+      organizationId = role?.organizationId ?? null;
+    }
+    if (!organizationId) {
+      organizationId = await hiveInviteOrganization(prisma, c.req.query("invite") ?? "");
+    }
+    if (!organizationId) {
+      const organizations = await runAsSystem("hive brand organizations", () =>
+        prisma.organization.findMany({ select: { id: true }, take: 2 }),
+      );
+      organizationId = organizations.length === 1 ? organizations[0].id : null;
+    }
+    return c.json(await loadHiveBrand(prisma, organizationId, Boolean(session?.user.id)));
   });
   mountAppAssociation(app, env);
   if (localEmailEmulator && env.nodeEnv === "development") {

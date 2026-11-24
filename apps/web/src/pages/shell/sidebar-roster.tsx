@@ -18,6 +18,7 @@ import { ChevronDown, CircleAlert, Lock, MoreHorizontal, Pencil, Trash2 } from "
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import { Suspense } from "react";
 import { IconTooltip } from "../../components/IconTooltip";
+import { useHiveBrand } from "../../lib/hive-brand";
 import type { BotsSidebarDensity } from "../../lib/bots-sidebar-density-pref";
 import {
   compactRosterStatusLabel,
@@ -91,6 +92,7 @@ export function SidebarRoster({
   mini?: boolean;
 }) {
   const { t } = useLingui();
+  const avatars = new Map(useHiveBrand()?.avatars.map((item) => [item.botId, item.image]) ?? []);
   return (
     <>
       {sidebarGroups.map((group, groupIndex) => {
@@ -297,13 +299,22 @@ export function SidebarRoster({
                 const rowSameList =
                   Boolean(draggedBotId) && groupBotIds.includes(draggedBotId ?? "");
                 const rowDropKey = `row:${item.kind}:${item.chat.id}`;
+                const uploaded = item.kind === "bot" ? avatars.get(item.chat.id) : undefined;
+                const size = mini ? 40 : compact ? 28 : 38;
                 const avatar =
-                  item.kind === "bot" ? (
+                  item.kind === "bot" && uploaded ? (
+                    <img
+                      src={uploaded}
+                      alt=""
+                      className="rounded-full object-cover"
+                      style={{ width: size, height: size }}
+                    />
+                  ) : item.kind === "bot" ? (
                     <BotAvatar
                       avatarSet={item.chat.avatarSet}
                       color={item.chat.color}
                       identity={item.chat.id}
-                      size={mini ? 40 : compact ? 28 : 38}
+                      size={size}
                       status={item.chat.status}
                     />
                   ) : (

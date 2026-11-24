@@ -86,6 +86,7 @@ export * from "./host-aware-sandbox.js";
 export * from "./http-decisions.js";
 export * from "./hive-bot-vault.js";
 export * from "./hive-knowledge.js";
+export * from "./hive-brand.js";
 export * from "./infisical-secret-store.js";
 export * from "./openbao-secret-store.js";
 export * from "./installed-connectors.js";

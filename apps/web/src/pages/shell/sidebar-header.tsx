@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { IconTooltip } from "../../components/IconTooltip";
 import { desktopBridge } from "../../lib/desktop";
 import type { Panel } from "../../lib/right-panel-state";
+import { hiveBrandMark, useHiveBrand } from "../../lib/hive-brand";
 import { WindowChrome } from "../WindowChrome";
 import { BotCreatePicker } from "./bot-picker";
 import { isCreateMenuHotkey } from "./command-palette-hotkey";
@@ -60,12 +61,22 @@ export function SidebarHeader({
   setCreateBotOpen: (open: boolean) => void;
 }) {
   const { t } = useLingui();
+  const brand = useHiveBrand();
+  const logo = hiveBrandMark(brand);
   const hasWindowChrome = Boolean(desktopBridge());
   const toggleLabel = mini ? t`Show bots` : t`Minimize bots`;
   return (
     <div
       className={`app-drag flex items-center ${mini ? `flex-col gap-2 px-0 pb-2 ${hasWindowChrome ? "pt-4" : "pt-2"}` : "justify-between px-[18px] pb-3 pt-4"}`}
     >
+      {!mini && brand?.productName ? (
+        <div className="app-no-drag flex min-w-0 items-center gap-2">
+          {logo ? <img src={logo} alt="" className="size-6 object-contain" /> : null}
+          <span className="truncate text-sm font-medium" style={brand.accent ? { color: "var(--brand-accent)" } : undefined}>
+            {brand.productName}
+          </span>
+        </div>
+      ) : null}
       {!mini || hasWindowChrome ? <WindowChrome /> : null}
       <div className={`relative flex items-center ${mini ? "flex-col gap-0.5" : "gap-2.5"}`}>
         {onSearch ? (
