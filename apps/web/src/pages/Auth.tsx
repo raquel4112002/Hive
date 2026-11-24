@@ -39,6 +39,8 @@ async function signUpWithInvite(input: {
     token?: string | null;
   } | null;
   if (!response.ok) return { error: data ?? { message: "Could not continue" }, data: null };
+  // A full load reads the new cookie before the routes render, and lands on the person's bots.
+  window.location.assign("/app");
   return { error: null, data };
 }
 const CODE_LENGTH = 6;

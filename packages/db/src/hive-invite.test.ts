@@ -53,7 +53,13 @@ describe("acceptHiveInvite", () => {
           return data;
         },
       },
-      spaceMember: { create: async () => ({}) },
+      spaceMember: {
+        upsert: async ({
+          where,
+        }: {
+          where: { spaceId_userId: { spaceId: string; userId: string } };
+        }) => where,
+      },
       hiveRole: {
         create: async ({ data }: { data: { organizationId: string; userId: string; role: string } }) => {
           roles.push(data);
@@ -84,6 +90,7 @@ describe("acceptHiveInvite", () => {
       expect.objectContaining({ organizationId: "org-1", userId: "user-2", role: "member" }),
     ]);
     expect(roles).toEqual([{ organizationId: "org-1", userId: "user-2", role: "USER" }]);
+    expect(prisma.spaceMember.upsert).toBeDefined();
     expect(areas).toEqual(
       expect.arrayContaining([
         { departmentId: "dept-1", userId: "user-2" },
@@ -96,16 +103,17 @@ describe("acceptHiveInvite", () => {
     );
   });
 
-  it("keeps the invited role when the default space membership already exists", async () => {
+  it("keeps an existing space membership for the same person and still fails other errors", async () => {
     const invite = {
       id: "inv-3",
       organizationId: "org-1",
       email: "invited@example.test",
-      role: "ADMIN",
-      departmentIds: "",
+      role: "USER",
+      departmentIds: "dept-1",
       expiresAt: new Date(Date.now() + 60_000),
       usedAt: null as Date | null,
     };
+    const memberships: Array<{ spaceId: string; userId: string }> = [];
     const roles: Array<{ role: string }> = [];
     const prisma = {
       hiveInvite: {
@@ -115,14 +123,15 @@ describe("acceptHiveInvite", () => {
           return { count: 1 };
         },
       },
-      member: {
-        create: async () => {
-          throw Object.assign(new Error("unique"), { code: "P2002" });
-        },
-      },
+      member: { create: async () => ({}) },
       spaceMember: {
-        create: async () => {
-          throw Object.assign(new Error("unique"), { code: "P2002" });
+        upsert: async ({
+          where,
+        }: {
+          where: { spaceId_userId: { spaceId: string; userId: string } };
+        }) => {
+          memberships.push(where.spaceId_userId);
+          return where.spaceId_userId;
         },
       },
       hiveRole: {
@@ -146,9 +155,17 @@ describe("acceptHiveInvite", () => {
       "invite-token",
     );
     expect(joined.spaceId).toBe("org-1");
+    expect(memberships).toEqual([{ spaceId: "org-1", userId: "user-3" }]);
     expect(roles).toEqual([
-      expect.objectContaining({ organizationId: "org-1", userId: "user-3", role: "ADMIN" }),
+      expect.objectContaining({ organizationId: "org-1", userId: "user-3", role: "USER" }),
     ]);
+    prisma.member.create = async () => {
+      throw Object.assign(new Error("organization missing"), { code: "P2003" });
+    };
+    invite.usedAt = null;
+    await expect(
+      acceptHiveInvite(prisma as unknown as PrismaClient, { id: "user-4", email: invite.email }, "invite-token"),
+    ).rejects.toThrow("organization missing");
   });
 
   it("refuses an expired invite and a different email", async () => {

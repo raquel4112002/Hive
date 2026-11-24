@@ -195,7 +195,11 @@ function SessionApp() {
               <Route
                 path="/sign-up"
                 element={
-                  user ? <Navigate to="/onboarding" replace /> : <AuthPage key="up" mode="up" />
+                  user ? (
+                    <Navigate to={searchParams.get("invite") ? "/app" : "/onboarding"} replace />
+                  ) : (
+                    <AuthPage key="up" mode="up" />
+                  )
                 }
               />
               <Route

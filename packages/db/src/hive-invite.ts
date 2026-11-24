@@ -29,10 +29,6 @@ function newId(): string {
   return randomBytes(16).toString("hex");
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
-}
-
 type InviteRow = {
   id: string;
   organizationId: string;
@@ -118,34 +114,29 @@ export async function acceptHiveInvite(
     });
     if (claimed.count !== 1) throw new IsolationError();
     const organizationId = invite.organizationId;
-    await prisma.member
-      .create({
-        data: {
-          id: newId(),
-          organizationId,
-          userId: user.id,
-          role: "member",
-          createdAt: new Date(),
-        },
-      })
-      .catch((error: unknown) => {
-        if (!isUniqueViolation(error)) throw error;
-      });
-    // Inserting the organization member also creates the default space membership.
-    await prisma.spaceMember
-      .create({
-        data: {
-          id: newId(),
-          spaceId: organizationId,
-          organizationId,
-          userId: user.id,
-          role: "member",
-          createdAt: new Date(),
-        },
-      })
-      .catch((error: unknown) => {
-        if (!isUniqueViolation(error)) throw error;
-      });
+    await prisma.member.create({
+      data: {
+        id: newId(),
+        organizationId,
+        userId: user.id,
+        role: "member",
+        createdAt: new Date(),
+      },
+    });
+    // The member insert already files this person into the default space.
+    // Keep that row; any other failure still stops the invite.
+    await prisma.spaceMember.upsert({
+      where: { spaceId_userId: { spaceId: organizationId, userId: user.id } },
+      create: {
+        id: newId(),
+        spaceId: organizationId,
+        organizationId,
+        userId: user.id,
+        role: "member",
+        createdAt: new Date(),
+      },
+      update: {},
+    });
     await prisma.hiveRole.create({
       data: {
         organizationId,
@@ -160,11 +151,9 @@ export async function acceptHiveInvite(
     for (const departmentId of departmentIds) {
       await prisma.departmentMember.create({ data: { departmentId, userId: user.id } });
     }
-    await prisma.notificationPreference
-      .create({ data: { spaceId: organizationId, userId: user.id } })
-      .catch((error: unknown) => {
-        if (!isUniqueViolation(error)) throw error;
-      });
+    await prisma.notificationPreference.create({
+      data: { spaceId: organizationId, userId: user.id },
+    });
     return organizationId;
   });
   await joinEveryone(prisma, spaceId, user.id);
