@@ -345,6 +345,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           botId: run.botId,
           workerId,
           runFence: fence,
+          allowDedicated: hiveComputerId !== null,
         });
         if (!computerLease && leaseTarget.computer?.scope === "dedicated") {
           computerLease = await acquireDedicatedScreenLeaseFence(deps.prisma, {
@@ -367,6 +368,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           },
           select: { id: true },
         });
+        if (!heldByAnotherRun) throw error;
         await requeueComputerRun(
           deps,
           runId,
@@ -374,7 +376,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           fence,
           resumeCheckpoint,
           heldForTakeover,
-          Boolean(heldByAnotherRun),
+          true,
         );
         return;
       }
@@ -1756,7 +1758,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         // retry budget that eventually fails the run.
         if (deps.shutdownSignal?.aborted) return;
         const computerBusy = setupError instanceof ComputerBusyError;
-        const retryForever = computerBusy || isTooManyDatabaseConnections(setupError);
+        const retryForever = isTooManyDatabaseConnections(setupError);
         const setupMessage = redactSecrets(userRunError(setupError), runSecrets);
         const reportedSetupError = sanitizedError(setupError, (text) =>
           redactSecrets(text, runSecrets),
@@ -1773,9 +1775,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           getLogger().error("run setup failed", reportedSetupError);
         }
         const priorFailures = retryForever ? 0 : await setupFailureStreak(deps.prisma, runId);
-        // The job reconciler re-enqueues a queued run whose job ran out of attempts, so a
-        // setup that fails every time would retry forever. End the run instead.
-        if (!retryForever && priorFailures >= RUN_SETUP_FAILURE_LIMIT - 1) {
+        // A missing computer never appears on a later try. Any other setup that fails
+        // every time would be re-enqueued by the job reconciler, so end the run instead.
+        const noComputer =
+          setupError instanceof Error && setupError.message === "Bot has no computer";
+        if (noComputer || (!retryForever && priorFailures >= RUN_SETUP_FAILURE_LIMIT - 1)) {
           const bot = await deps.prisma.bot.findUnique({
             where: { id: run.botId },
             select: { name: true },
@@ -1844,6 +1848,35 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           await releaseComputerExecutionLease(deps.prisma, computerLease).catch(() => undefined);
           // A stopping process requeues this run instead, which must keep its turn.
           if (!deps.shutdownSignal?.aborted) {
+            // A return that left this worker's row running would stay on "working".
+            let still: {
+              status: string;
+              leaseOwner: string | null;
+              leaseFence: number | null;
+            } | null = null;
+            try {
+              if (typeof deps.prisma.run?.findUnique === "function") {
+                still = await deps.prisma.run.findUnique({
+                  where: { id: runId },
+                  select: { status: true, leaseOwner: true, leaseFence: true },
+                });
+              }
+            } catch {
+              still = null;
+            }
+            if (
+              still?.status === "running" &&
+              still.leaseOwner === workerId &&
+              still.leaseFence === fence
+            ) {
+              await failRunBeforeTurn(
+                deps,
+                run,
+                "",
+                { attemptId: attempt.id, workerId, fence },
+                "Run stopped before it finished",
+              ).catch((error) => getLogger().error("unfinished run", error));
+            }
             await startNextWaitingRun(deps, run.botId, runId).catch((error) =>
               getLogger().error("start next waiting run", error),
             );

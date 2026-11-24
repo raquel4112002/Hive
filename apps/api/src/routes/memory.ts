@@ -2,7 +2,13 @@ import { ORPCError } from "@orpc/server";
 import { MEMORY_REVISION_CONFLICT_ERROR } from "@rakazo/adapter-kit";
 import { isScratchpadStatus, listScratchpadItems, mapScratchpadItem } from "@rakazo/adapters";
 import { isDeletableMemoryDocument } from "@rakazo/contracts";
-import { findSpaceMemoryConfig, IsolationError } from "@rakazo/db";
+import {
+  findSpaceMemoryConfig,
+  IsolationError,
+  listMemoryForActor,
+  memoryDocumentForActor,
+  runAsSystem,
+} from "@rakazo/db";
 import {
   disconnectMemoryProvider,
   persistMemoryProviderConfig,
@@ -16,13 +22,9 @@ export function memoryRoutes(ctx: RouterContext) {
   return {
     memory: {
       list: authed.memory.list.handler(async ({ context, input }) => {
-        const docs = await deps.prisma.memoryDocument.findMany({
-          where: {
-            spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
-            ...(input.botId ? { botId: input.botId } : {}),
-            ...(input.scope ? { scope: input.scope } : {}),
-          },
+        const docs = await listMemoryForActor(deps.prisma, context.actor, {
+          botId: input.botId,
+          scope: input.scope,
         });
         return docs.map((doc) => ({
           id: doc.id,
@@ -35,16 +37,10 @@ export function memoryRoutes(ctx: RouterContext) {
         }));
       }),
       update: authed.memory.update.handler(async ({ context, input }) => {
-        const doc = await deps.prisma.memoryDocument.findFirst({
-          where: {
-            id: input.documentId,
-            spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
-          },
-        });
+        const doc = await memoryDocumentForActor(deps.prisma, context.actor, input.documentId);
         if (!doc) throw new IsolationError();
-        const updated = await deps.memory
-          .commit(
+        const commit = () =>
+          deps.memory.commit(
             {
               scope: doc.scope as "bot" | "user",
               botId: doc.botId ?? undefined,
@@ -56,16 +52,19 @@ export function memoryRoutes(ctx: RouterContext) {
               operationId: "mem",
               traceId: "mem",
               spaceId: context.actor.spaceId,
-              userId: context.actor.userId,
+              userId: doc.userId,
               signal: new AbortController().signal,
             },
-          )
-          .catch((error: unknown) => {
-            if (error instanceof Error && error.message === MEMORY_REVISION_CONFLICT_ERROR) {
-              throw new ORPCError("CONFLICT", { message: error.message });
-            }
-            throw error;
-          });
+          );
+        const updated = await (doc.userId === context.actor.userId
+          ? commit()
+          : runAsSystem("hive bot memory", commit)
+        ).catch((error: unknown) => {
+          if (error instanceof Error && error.message === MEMORY_REVISION_CONFLICT_ERROR) {
+            throw new ORPCError("CONFLICT", { message: error.message });
+          }
+          throw error;
+        });
         return {
           id: updated.id,
           scope: doc.scope as "bot" | "user",
@@ -77,43 +76,37 @@ export function memoryRoutes(ctx: RouterContext) {
         };
       }),
       remove: authed.memory.remove.handler(async ({ context, input }) => {
-        const doc = await deps.prisma.memoryDocument.findFirst({
-          where: {
-            id: input.documentId,
-            spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
-          },
-        });
+        const doc = await memoryDocumentForActor(deps.prisma, context.actor, input.documentId);
         if (!doc) throw new IsolationError();
         if (!isDeletableMemoryDocument(doc.path)) {
           throw new ORPCError("BAD_REQUEST", {
             message: `${doc.path} cannot be deleted; edit its content instead.`,
           });
         }
-        await deps.memory.remove(
-          {
-            id: doc.id,
-            scope: doc.scope as "bot" | "user",
-            botId: doc.botId ?? undefined,
-            path: doc.path,
-          },
-          {
-            operationId: "mem",
-            traceId: "mem",
-            spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
-            signal: new AbortController().signal,
-          },
-        );
+        const remove = () =>
+          deps.memory.remove(
+            {
+              id: doc.id,
+              scope: doc.scope as "bot" | "user",
+              botId: doc.botId ?? undefined,
+              path: doc.path,
+            },
+            {
+              operationId: "mem",
+              traceId: "mem",
+              spaceId: context.actor.spaceId,
+              userId: doc.userId,
+              signal: new AbortController().signal,
+            },
+          );
+        await (doc.userId === context.actor.userId
+          ? remove()
+          : runAsSystem("hive bot memory", remove));
         return { ok: true as const };
       }),
       exportMarkdown: authed.memory.exportMarkdown.handler(async ({ context, input }) => {
-        const docs = await deps.prisma.memoryDocument.findMany({
-          where: {
-            spaceId: context.actor.spaceId,
-            userId: context.actor.userId,
-            ...(input.botId ? { botId: input.botId } : {}),
-          },
+        const docs = await listMemoryForActor(deps.prisma, context.actor, {
+          botId: input.botId,
         });
         return docs.map((d) => `# ${d.path}\n\n${d.content}`).join("\n\n");
       }),

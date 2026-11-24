@@ -840,6 +840,25 @@ export async function ensureHiveConversationComputer(
   });
 }
 
+/** The computer this person is chatting on, when the bot has one. */
+export async function conversationComputerForActor(
+  prisma: PrismaClient,
+  actor: { userId: string; spaceId: string },
+  botId: string,
+) {
+  if (typeof prisma.botUserComputer?.findUnique !== "function") return null;
+  const slot = await runAsSystem("hive conversation computer", () =>
+    prisma.botUserComputer.findUnique({
+      where: { botId_userId: { botId, userId: actor.userId } },
+      select: { computerId: true },
+    }),
+  );
+  if (!slot?.computerId) return null;
+  return prisma.computer.findFirst({
+    where: { id: slot.computerId, spaceId: actor.spaceId },
+  });
+}
+
 export async function hiveConnectionWhere(
   prisma: PrismaClient,
   botId: string,
@@ -875,7 +894,9 @@ export async function hiveScreenDecision(
   const service = await hiveServiceBot(prisma, botId, actor.spaceId);
   if (!service) return "legacy";
   const hive = await readHiveRole(prisma, actor);
-  if (!hive || hive.archived || hive.role !== "USER") return "deny";
+  if (!hive || hive.archived) return "deny";
+  // The founder is an admin and still uses the computer on their own chat.
+  if (hive.role !== "USER") return "legacy";
   const slot = await prisma.botUserComputer.findUnique({
     where: { botId_userId: { botId, userId: actor.userId } },
   });
@@ -952,4 +973,62 @@ export async function requestDedicatedComputer(
     if (!mine) throw new IsolationError();
     return mine;
   });
+}
+
+/** The actor's documents, plus bot memory owned by a bot this person is allowed to see. */
+export async function listMemoryForActor(
+  prisma: PrismaClient,
+  actor: { userId: string; spaceId: string },
+  filter: { botId?: string; scope?: string },
+) {
+  const own = await prisma.memoryDocument.findMany({
+    where: {
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      ...(filter.botId ? { botId: filter.botId } : {}),
+      ...(filter.scope ? { scope: filter.scope } : {}),
+    },
+  });
+  if (!filter.botId || filter.scope === "user") return own;
+  const bot = await prisma.bot.findFirst({
+    where: scopedBotWhere(await botsWhereForActor(prisma, actor, "any"), filter.botId),
+    select: { userId: true },
+  });
+  if (!bot || bot.userId === actor.userId) return own;
+  const shared = await runAsSystem("hive bot memory", () =>
+    prisma.memoryDocument.findMany({
+      where: {
+        spaceId: actor.spaceId,
+        userId: bot.userId,
+        botId: filter.botId,
+        scope: "bot",
+      },
+    }),
+  );
+  const seen = new Set(own.map((doc) => doc.id));
+  return [...own, ...shared.filter((doc) => !seen.has(doc.id))];
+}
+
+/** One document the actor owns, or bot memory of a bot the actor is allowed to see. */
+export async function memoryDocumentForActor(
+  prisma: PrismaClient,
+  actor: { userId: string; spaceId: string },
+  documentId: string,
+) {
+  const own = await prisma.memoryDocument.findFirst({
+    where: { id: documentId, spaceId: actor.spaceId, userId: actor.userId },
+  });
+  if (own) return own;
+  const doc = await runAsSystem("hive bot memory", () =>
+    prisma.memoryDocument.findFirst({
+      where: { id: documentId, spaceId: actor.spaceId, scope: "bot" },
+    }),
+  );
+  if (!doc?.botId) return null;
+  const bot = await prisma.bot.findFirst({
+    where: scopedBotWhere(await botsWhereForActor(prisma, actor, "any"), doc.botId),
+    select: { userId: true },
+  });
+  if (!bot || bot.userId !== doc.userId) return null;
+  return doc;
 }

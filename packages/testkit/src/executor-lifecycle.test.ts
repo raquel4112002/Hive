@@ -908,8 +908,9 @@ describeIntegration("run executor lifecycle", () => {
         where: { id: computerId },
       });
       expect(computer.state).toBe("booting");
-      const run = await db.run.findUniqueOrThrow({ where: { id: seeded.run.id } });
-      expect(run.status).not.toBe("completed");
+      expect(computer.providerRef).toBe("");
+      const lease = await db.computerExecutionLease.findFirst({ where: { computerId } });
+      expect(lease?.botId).toBe("another-bot");
     } finally {
       // Shared Postgres journeys reuse one database. Leave this run terminal and the computer
       // unblocked so later suites' reconcilers do not keep retrying a wedged boot forever.

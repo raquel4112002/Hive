@@ -207,7 +207,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
   // No model is connected. Move the schedule forward without a run, so it does not fail later.
   // The scripted runtime is the offline stand-in and does not call a model.
   const scriptedRuntime =
-    typeof deps.runtime.describe === "function" && deps.runtime.describe().id === "scripted";
+    typeof deps.runtime?.describe === "function" && deps.runtime.describe().id === "scripted";
   const installationModel =
     !scriptedRuntime &&
     routine.watch == null &&

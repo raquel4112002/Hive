@@ -30,6 +30,7 @@ import {
   ensureServiceAccount,
   readHiveRole,
   scopedBotWhere,
+  conversationComputerForActor,
   threadsForActor,
   visibleBotIds,
 } from "./hive.js";
@@ -283,17 +284,20 @@ export function createRepos(
       input: { botId?: string; groupId?: string; name: string },
     ) {
       const { name } = input;
+      const hive = await readHiveRole(prisma, actor);
+      if (hive?.archived || hive?.role === "USER") throw new IsolationError();
+      const botScope = input.botId
+        ? scopedBotWhere(await botsWhereForActor(prisma, actor, false), input.botId)
+        : null;
       return prisma.$transaction(async (tx) => {
-        const target = input.botId
+        const bot = input.botId
           ? await tx.bot.findFirst({
-              where: {
-                id: input.botId,
-                spaceId: actor.spaceId,
-                userId: actor.userId,
-                archivedAt: null,
-              },
-              select: { id: true },
+              where: botScope!,
+              select: { id: true, userId: true },
             })
+          : null;
+        const group = input.botId
+          ? null
           : await tx.chatGroup.findFirst({
               where: {
                 id: input.groupId,
@@ -303,7 +307,7 @@ export function createRepos(
               },
               select: { id: true },
             });
-        if (!target) throw new IsolationError();
+        if (input.botId ? !bot : !group) throw new IsolationError();
 
         const aggregate = await tx.botSection.aggregate({
           where: { spaceId: actor.spaceId, userId: actor.userId },
@@ -327,11 +331,14 @@ export function createRepos(
             },
           },
         });
-        if (input.botId) {
-          await tx.bot.update({ where: { id: target.id }, data: { sectionId: section.id } });
-        } else {
+        if (bot) {
+          const write = () =>
+            tx.bot.update({ where: { id: bot.id }, data: { sectionId: section.id } });
+          if (bot.userId === actor.userId) await write();
+          else await runAsSystemInTransaction(tx, "hive section", write);
+        } else if (group) {
           await tx.chatGroup.update({
-            where: { id: target.id },
+            where: { id: group.id },
             data: { sectionId: section.id },
           });
         }
@@ -550,7 +557,12 @@ export function createRepos(
       });
       if (!bot) throw new IsolationError();
       const threads = await threadsForActor(prisma, actor, [bot.id]);
-      return { ...bot, thread: threads.get(bot.id) ?? carriedThread(bot) };
+      const conversation = await conversationComputerForActor(prisma, actor, bot.id);
+      return {
+        ...bot,
+        computer: conversation ?? bot.computer,
+        thread: threads.get(bot.id) ?? carriedThread(bot),
+      };
     },
 
     async createBot(

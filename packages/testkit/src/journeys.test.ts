@@ -147,6 +147,19 @@ describeJourneys("required product journeys", () => {
     botIntroHarness = handles;
   });
 
+  async function computerForChat(botId: string) {
+    const slot = await prisma.botUserComputer.findFirst({
+      where: { botId, computerId: { not: null } },
+      select: { computerId: true },
+    });
+    if (slot?.computerId) {
+      return prisma.computer.findUniqueOrThrow({ where: { id: slot.computerId } });
+    }
+    return prisma.computer.findFirstOrThrow({
+      where: { bots: { some: { id: botId } } },
+    });
+  }
+
   afterAll(async () => {
     await stop?.();
   });
@@ -355,9 +368,7 @@ describeJourneys("required product journeys", () => {
     const runId = waiting.run?.id;
     if (!runId) throw new Error("waiting run missing");
     await waitForDatabase(async () => {
-      const computer = await prisma.computer.findFirstOrThrow({
-        where: { bots: { some: { id: bot.id } } },
-      });
+      const computer = await computerForChat(bot.id);
       return computer.controlHolder === "user" && computer.controlRunId === runId;
     });
 
@@ -368,9 +379,7 @@ describeJourneys("required product journeys", () => {
 
     const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
     expect(run.status).toBe("waiting_takeover");
-    const computer = await prisma.computer.findFirstOrThrow({
-      where: { bots: { some: { id: bot.id } } },
-    });
+    const computer = await computerForChat(bot.id);
     expect(computer.controlHolder).toBe("user");
     expect(computer.controlLeaseId).not.toBeNull();
     expect(computer.controlRunId).toBe(runId);
@@ -3552,7 +3561,9 @@ describeJourneys("required product journeys", () => {
         name: "Crew",
         botIds: [alpha.id, beta.id],
       });
-      const alphaThread = await prisma.thread.findFirstOrThrow({ where: { botId: alpha.id } });
+      const alphaThread = await prisma.thread.findFirstOrThrow({
+        where: { botId: alpha.id, userId: me.userId, routineId: null },
+      });
       const botState = () =>
         prisma.bot.findUniqueOrThrow({
           where: { id: alpha.id },

@@ -166,6 +166,20 @@ export class ComputerBusyError extends Error {
 
 export { toComputerRef } from "./computer-support.js";
 
+/** True when this computer is the person's conversation computer for the bot. */
+async function hiveConversationComputer(
+  prisma: PrismaClient,
+  computerId: string,
+  botId: string | undefined,
+): Promise<boolean> {
+  if (!botId || typeof prisma.botUserComputer?.findFirst !== "function") return false;
+  const row = await prisma.botUserComputer.findFirst({
+    where: { computerId, botId },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
 export async function provisionComputer(
   deps: {
     prisma: PrismaClient;
@@ -195,6 +209,17 @@ export async function provisionComputer(
     }
   }
   const homePath = resolveAgentHomePath(deps.home, existing.homeKey, deps.dataDir ?? "./data");
+  // A person's conversation computer is not bots.computerId. The team claim would miss it
+  // and the run would stay queued on "working". The scope key is on the row just read.
+  const conversationOwned =
+    (existing.scope === "dedicated" &&
+      typeof existing.scopeKey === "string" &&
+      existing.scopeKey.startsWith("hive:")) ||
+    (await hiveConversationComputer(deps.prisma, computerId, context.botId));
+  const botOwner =
+    context.botId && !conversationOwned
+      ? { bots: { some: { id: context.botId, archivedAt: null as const } } }
+      : {};
 
   // Re-provisioning a live computer enters booting and revokes its screen URLs.
   // A provider-confirmed live reference needs setup, not a new lifecycle claim.
@@ -216,7 +241,7 @@ export async function provisionComputer(
           kind: existing.kind,
           screenGeneration: existing.screenGeneration,
           maintenanceId: existing.maintenanceId ?? null,
-          ...(context.botId ? { bots: { some: { id: context.botId, archivedAt: null } } } : {}),
+          ...botOwner,
         },
         // A row activated by an older release has no clock yet; start it now.
         data: { updatedAt: new Date(), runningSince },
@@ -358,7 +383,7 @@ export async function provisionComputer(
       // A start this one reclaims from may have marked its new machine since it was read.
       restorePending: existing.restorePending,
       maintenanceId: existing.maintenanceId ?? null,
-      ...(context.botId ? { bots: { some: { id: context.botId, archivedAt: null } } } : {}),
+      ...botOwner,
     },
     data: { state: "booting", updatedAt: claimStamp },
   });
@@ -504,7 +529,7 @@ export async function provisionComputer(
         updatedAt: claimStamp,
         ...previousRef,
         maintenanceId: existing.maintenanceId ?? null,
-        ...(context.botId ? { bots: { some: { id: context.botId, archivedAt: null } } } : {}),
+        ...botOwner,
       },
       data: {
         state: "running",
@@ -819,12 +844,15 @@ export async function acquireComputerExecutionLease(
     computerId: string;
     runId: string;
     botId: string;
-  } & ({ workerId: string; runFence: number } | { workerId?: never; runFence?: never }),
+  } & ({ workerId: string; runFence: number } | { workerId?: never; runFence?: never }) & {
+      /** A conversation computer is dedicated and is not the bot's team computer. */
+      allowDedicated?: boolean;
+    },
 ): Promise<ComputerExecutionLease | null> {
   const computer = await prisma.computer.findUniqueOrThrow({ where: { id: input.computerId } });
   if (computer.maintenanceId && computer.maintenanceId !== input.runId)
     throw new ComputerBusyError();
-  if (computer.scope !== "team") return null;
+  if (computer.scope !== "team" && input.allowDedicated !== true) return null;
   if (isLiveSuspending(computer)) throw new ComputerBusyError();
   return prisma.$transaction(async (tx) => {
     // Only the locked current worker claim may reclaim a live same-run lease.

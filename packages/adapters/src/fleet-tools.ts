@@ -17,6 +17,7 @@ import {
 import { CARD_TITLE_ESCAPED_CHARACTERS, ONCE_ROUTINE_CRON, redactSecrets } from "@rakazo/core";
 import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
+  botsWhereForActor,
   commitBotUpdate,
   createGroupRepos,
   createRepos,
@@ -501,7 +502,7 @@ export async function listFleet(
   if (detail) return { bot: detail, bots: [], groups: [], sections: [], truncated: false };
   const [bots, groups, sections] = await Promise.all([
     prisma.bot.findMany({
-      where: activeBotsWhere(run),
+      where: await activeBotsWhere(prisma, run),
       select: {
         id: true,
         name: true,
@@ -1091,7 +1092,14 @@ const botSelect = {
   threads: { ...ownerThreadArgs, select: { id: true } },
 } satisfies Prisma.BotSelect;
 
-function activeBotsWhere(run: FleetRun): Prisma.BotWhereInput {
+async function activeBotsWhere(
+  prisma: PrismaClient,
+  run: FleetRun,
+): Promise<Prisma.BotWhereInput> {
+  // Hive bots belong to the service account. An admin still manages the ones they can see.
+  if (typeof prisma.hiveRole?.findUnique === "function") {
+    return botsWhereForActor(prisma, { userId: run.userId, spaceId: run.spaceId }, false);
+  }
   return { ...managedBotsWhere(run), archivedAt: null };
 }
 
@@ -1105,7 +1113,7 @@ async function resolveBots(
   const names = input.names ?? [];
   const rows = await prisma.bot.findMany({
     where: {
-      ...activeBotsWhere(run),
+      ...(await activeBotsWhere(prisma, run)),
       ...(ids.length ? { id: { in: ids } } : { name: { in: names } }),
     },
     select: { id: true, name: true },
@@ -1137,7 +1145,7 @@ async function resolveBot(prisma: PrismaClient, run: FleetRun, args: Record<stri
   if (!id && !name) return refuse("Pass bot_id or bot_name.");
   const target = id ? { id } : { name };
   const bots = await prisma.bot.findMany({
-    where: { ...activeBotsWhere(run), ...target },
+    where: { ...(await activeBotsWhere(prisma, run)), ...target },
     select: botSelect,
     take: 2,
   });

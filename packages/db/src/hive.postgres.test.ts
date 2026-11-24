@@ -15,6 +15,8 @@ import {
   inspectConversation,
   linkBotConnection,
   listBotPosts,
+  listMemoryForActor,
+  memoryDocumentForActor,
   removeHivePerson,
   renameHiveDepartment,
   requestDedicatedComputer,
@@ -542,5 +544,67 @@ describePostgres("hive access (PostgreSQL)", () => {
         prisma.memoryRevision.findMany({ where: { documentId: service.id } }),
       ),
     ).toEqual([]);
+  });
+
+  it("lets someone who can see the bot read its memory without opening another person's notes", async () => {
+    await assignBotDepartment(prisma, actor(superId), botId, departmentId);
+    const botMemory = await runAsSystem("hive bot memory fixture", () =>
+      prisma.memoryDocument.create({
+        data: {
+          spaceId,
+          userId: serviceId,
+          botId,
+          scope: "bot",
+          path: `notes-${suffix}.md`,
+          content: "shared-note",
+        },
+      }),
+    );
+    const privateNote = await runAsSystem("hive private memory fixture", () =>
+      prisma.memoryDocument.create({
+        data: {
+          spaceId,
+          userId: userA,
+          scope: "user",
+          path: `private-${suffix}.md`,
+          content: "only-a",
+        },
+      }),
+    );
+    const seenByB = await runAsTenant(actor(userB), () =>
+      listMemoryForActor(prisma, actor(userB), { botId }),
+    );
+    expect(seenByB.map((doc) => doc.id)).toContain(botMemory.id);
+    expect(seenByB.map((doc) => doc.id)).not.toContain(privateNote.id);
+    expect(
+      await runAsTenant(actor(userB), () =>
+        memoryDocumentForActor(prisma, actor(userB), privateNote.id),
+      ),
+    ).toBeNull();
+    expect(
+      await runAsTenant(actor(userB), () =>
+        memoryDocumentForActor(prisma, actor(userB), botMemory.id),
+      ),
+    ).toMatchObject({ id: botMemory.id, content: "shared-note" });
+  });
+
+  it("lets an admin file an organization bot into a section and refuses a member", async () => {
+    const repos = createRepos(prisma);
+    const section = await runAsTenant(actor(superId), () =>
+      repos.createBotSection(actor(superId), { botId, name: `Research-${suffix}` }),
+    );
+    expect(section.name).toBe(`Research-${suffix}`);
+    const filed = await runAsSystem("read hive section", () =>
+      prisma.bot.findUniqueOrThrow({
+        where: { id: botId },
+        select: { section: { select: { name: true, userId: true } } },
+      }),
+    );
+    expect(filed.section).toEqual({ name: `Research-${suffix}`, userId: superId });
+    await expect(
+      runAsTenant(actor(userA), () =>
+        repos.createBotSection(actor(userA), { botId, name: `Nope-${suffix}` }),
+      ),
+    ).rejects.toBeInstanceOf(IsolationError);
   });
 });

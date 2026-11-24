@@ -54,9 +54,8 @@ found="$(grep -E \
 mkdir "${work}/app"
 tar -xf "${rootfs}" -C "${work}/app" --exclude=node_modules app
 while IFS= read -r file; do
-  if awk '/-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY-----/ {
-        if ((getline body) > 0 && body ~ /^[A-Za-z0-9+\/=]{40,}$/) { found = 1; exit }
-      } END { exit !found }' "${file}"; then
+  if grep -E -A1 -- '-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY-----' "${file}" \
+    | grep -E '^[A-Za-z0-9+/=]{40,}$' >/dev/null; then
     found+="${found:+$'\n'}${file#"${work}/app/"}"
   fi
 done < <(grep -rlE -- '-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY-----' "${work}/app" 2>/dev/null || true)

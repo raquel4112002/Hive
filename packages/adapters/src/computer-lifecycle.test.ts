@@ -100,6 +100,56 @@ describe("computer provisioning", () => {
     }
   });
 
+  it("claims a conversation computer that is not the bot's team computer", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-conversation-provision-"));
+    const ref: ComputerRef = {
+      id: "computer-person",
+      botId: "bot-1",
+      kind: "fake",
+      providerRef: "fake-person",
+    };
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      computer: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          ...ref,
+          homeKey: "hive-person",
+          scope: "dedicated",
+          scopeKey: "hive:bot-1:user-1",
+          state: "stopped",
+          updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+        }),
+        updateMany,
+      },
+    } as unknown as PrismaClient;
+    const sandbox = {
+      describe: () => ({ id: "fake" }),
+      provision: vi.fn().mockResolvedValue(ref),
+      prepare: vi.fn().mockResolvedValue(undefined),
+    } as unknown as SandboxProvider;
+
+    try {
+      await provisionComputer(
+        {
+          prisma,
+          sandbox,
+          home: {} as AgentHomeStore,
+          jobs: {} as JobPublisher,
+          events: {} as ThreadEvents,
+          dataDir,
+        },
+        "computer-person",
+        context,
+      );
+      for (const [call] of updateMany.mock.calls) {
+        expect(call.where).not.toHaveProperty("bots");
+      }
+      expect(updateMany).toHaveBeenCalled();
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("stops a provider when archive invalidates its boot claim", async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-provision-race-"));
     const stop = vi.fn().mockResolvedValue(undefined);
