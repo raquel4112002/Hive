@@ -20,6 +20,17 @@ export function liteLLMModelBaseUrl(config: LiteLLMConfig): string {
 
 type FetchLike = typeof fetch;
 
+type SpendMeta = { bot_id?: string; user_api_key_alias?: string };
+
+/** The proxy keeps bot_id on the key, and copies the key alias onto each request log. */
+function botIdFromSpend(metadata: SpendMeta | undefined): string | null {
+  const direct = metadata?.bot_id?.trim();
+  if (direct) return direct;
+  const alias = metadata?.user_api_key_alias?.trim() ?? "";
+  const prefix = "hive-";
+  return alias.startsWith(prefix) ? alias.slice(prefix.length) : null;
+}
+
 export function createLiteLLM(config: LiteLLMConfig, fetchImpl: FetchLike = fetch) {
   async function call(path: string, init: RequestInit = {}): Promise<unknown> {
     const response = await fetchImpl(`${config.baseUrl}${path}`, {
@@ -100,15 +111,14 @@ export function createLiteLLM(config: LiteLLMConfig, fetchImpl: FetchLike = fetc
     },
 
     async spendLogs(startDate: string, endDate: string): Promise<LiteLLMSpendRow[]> {
-      const body = (await call(
-        `/spend/logs?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`,
-      )) as
-        | Array<{ spend?: number; metadata?: { bot_id?: string } }>
-        | { data?: Array<{ spend?: number; metadata?: { bot_id?: string } }> };
+      const query = `start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&summarize=false`;
+      const body = (await call(`/spend/logs?${query}`)) as
+        | Array<{ spend?: number; metadata?: SpendMeta }>
+        | { data?: Array<{ spend?: number; metadata?: SpendMeta }> };
       const rows = Array.isArray(body) ? body : (body.data ?? []);
       const totals = new Map<string, number>();
       for (const row of rows) {
-        const botId = row.metadata?.bot_id?.trim();
+        const botId = botIdFromSpend(row.metadata);
         if (!botId) continue;
         totals.set(botId, (totals.get(botId) ?? 0) + Number(row.spend ?? 0));
       }

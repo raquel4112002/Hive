@@ -34,10 +34,12 @@ describe("createLiteLLM", () => {
         return json({ key: "sk-bot", key_alias: "hive-bot-1" });
       }
       if (String(url).includes("/spend/logs")) {
+        expect(String(url)).toContain("summarize=false");
         return json({
           data: [
             { spend: 1.5, metadata: { bot_id: "bot-1" } },
             { spend: 0.5, metadata: { bot_id: "bot-1" } },
+            { spend: 4, metadata: { user_api_key_alias: "hive-bot-9" } },
             { spend: 3, metadata: {} },
           ],
         });
@@ -54,6 +56,7 @@ describe("createLiteLLM", () => {
     ).toEqual({ key: "sk-bot", keyAlias: "hive-bot-1" });
     expect(await client.spendLogs("2026-11-01", "2026-11-30")).toEqual([
       { botId: "bot-1", spendUsd: 2 },
+      { botId: "bot-9", spendUsd: 4 },
     ]);
     const listed = createLiteLLM(
       { baseUrl: "http://litellm.test", masterKey: "master" },
