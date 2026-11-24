@@ -946,12 +946,17 @@ describeJourneys("required product journeys", () => {
       });
 
       await waitForDatabase(async () => {
-        const storedBot = await prisma.bot.findUniqueOrThrow({
-          where: { id: bot.id },
-          include: { computer: true },
-        });
-        const computer = storedBot.computer!;
-        return computer.controlLeaseId === null && computer.controlHolder === "none";
+        const computer = await computerForChat(bot.id);
+        if (computer.controlLeaseId === null && computer.controlHolder === "none") return true;
+        if (
+          computer.controlLeaseExpiresAt &&
+          computer.controlLeaseExpiresAt.getTime() > Date.now()
+        ) {
+          return false;
+        }
+        await rpc(app, cookie, "computer/status", { botId: bot.id });
+        const again = await computerForChat(bot.id);
+        return again.controlLeaseId === null && again.controlHolder === "none";
       });
 
       expect(

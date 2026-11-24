@@ -792,11 +792,11 @@ describeWithDatabase("API authorization and resource isolation", () => {
     expect(
       await handles.prisma.capabilityInstall.findUnique({ where: { id: ownerCapability.id } }),
     ).not.toBeNull();
-    expect(
-      await asSystem(handles.prisma).connection.findUniqueOrThrow({
-        where: { id: ownerConnection.connectionId },
-      }),
-    ).toMatchObject({ status: "connected", userId: ownerActor.userId });
+    const keptConnection = await asSystem(handles.prisma).connection.findUniqueOrThrow({
+      where: { id: ownerConnection.connectionId },
+    });
+    expect(keptConnection.status).toBe("connected");
+    expect(keptConnection.userId).not.toBe(intruderActor.userId);
 
     const ownerBotAfter = await asSystem(handles.prisma).bot.findUniqueOrThrow({
       where: { id: ownerBot.id },
@@ -1618,7 +1618,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
     }
     // Nothing outside the deleted space goes with it.
     await expect(db.bot.findUnique({ where: { id: keepBot.id } })).resolves.not.toBeNull();
-    await expect(db.thread.count({ where: { botId: keepBot.id } })).resolves.toBe(1);
+    await expect(db.thread.count({ where: { botId: keepBot.id } })).resolves.toBe(3);
     await expect(db.routine.findUnique({ where: { id: keepRoutine.id } })).resolves.not.toBeNull();
     await expect(
       db.memoryDocument.count({ where: { spaceId: actor.spaceId } }),

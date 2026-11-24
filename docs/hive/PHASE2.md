@@ -581,3 +581,29 @@ O modelo de teste é `qwen3.5:2b`, servido pelo Ollama no computador anfitrião 
 Duas pessoas com `CHAT` no Desk enviaram uma mensagem e receberam resposta desse modelo. Cada uma vê só a sua conversa. O admin, também em Todos com `CHAT`, tem caixa no Desk. A rotina Daily do Bulletin criou um `BotPost`. O admin e as duas pessoas veem o mesmo post. O Bulletin não tem caixa nem threads pessoais. As duas pessoas recebem 404 ao enviar para o Bulletin, ao criar um bot e ao testar a rotina. As chamadas, incluindo ferramentas, terminaram sem erro.
 
 `pnpm test` no Windows falha em casos que não são da Fase 2: sockets de controlo em `\tmp\rk-control` com `EACCES`, scripts que invocam `sh` e deploys feitos para Unix, e workers de teste que esgotam o tempo. A mesma suite no commit anterior à Fase 2 falha nesses ficheiros. `events.test.ts` passou a usar `updateMany` e foi alinhado. A suite do servidor corre em Linux.
+
+## Dívida conhecida
+
+A suite de integração em Linux, depois da Fase 2, ficou com 69 testes falhados. Três já falhavam no commit da Fase 1 e não são regressão do Hive: o caminho de mensagens, Salesforce e Zendesk no eval de apoio ao cliente; as restrições gravadas no history-retrieval; e o arranque privado que fecha o signup e guarda a palavra-passe. O diagnóstico que reporta o login de um servidor MCP atribuído a um bot passou quando correu sozinho: a transação de signup esgotou o tempo dentro da suite completa.
+
+Quatro falhas dessa corrida passaram outra vez no código actual: a thread de serviço volta a ser criada, o computador que está a arrancar mantém o lease de outro bot, a semente do avatar sobrevive a uma resposta perdida, e o provisionamento de mensagens fica na conta de serviço. Três asserções foram alinhadas com o desenho, sem abrir acesso: a ligação que o intruso tenta ler continua na conta de serviço, o bot que sobrevive a um espaço apagado fica com a conversa da conta de serviço, a conversa de quem o criou e a thread da rotina, e a expiração de um takeover observa o computador da pessoa.
+
+O resto é dívida da Fase 2. Não se abre a criação de bots a um `USER`, nem se volta a pôr a conversa no computador da equipa, para os fazer passar.
+
+- Instalações de mensagens: o estado OAuth não fica reclamado, a ligação pessoal não aparece disponível, mover a instalação de outro tenant falha com o dono em falta, duas instalações concorrentes não deixam um vencedor, e a reconciliação não pára quando o dono perde a membresia.
+- Uma rotina de uma vez, editada para recorrente, fica `cancelled`.
+- A criação concorrente de avatares conta menos cores do que o teste pede, e a cor escolhida pelo chamador chega sem id.
+- Um bot arquivado sai da lista arquivada.
+- A importação de um agente escreve um `MEMORY.md` inicial a mais, ordena mal `MEMORY.md` e `USER.md`, não encontra a credencial na conta de serviço, perde chaves e a ligação feita entre a pré-visualização e o Create, devolve outro bot num Create repetido, deixa passar `openrouter`, e não conta o servidor MCP. O segundo membro é `USER` e recebe 404 ao criar, como deve ser.
+- Testes de rotina e menções noutro membro chamam `bots/create` com um `USER` e recebem 404.
+- Pensar à medida, com a fonte do modelo em falta, ainda responde para ligar um modelo nas definições.
+- A aprovação do computador, a permitir ou a negar, termina a execução em vez de ficar à espera da decisão.
+- Uma conta que o Composio marca como morta não fica no estado que o teste compara.
+- Os evals de silêncio não gastam todos os passos do modelo de teste.
+- Um computador da equipa deixado em `booting` por um worker caído não volta a `running`, porque a conversa já não o provisiona.
+- O histórico de clarificação, seguimento, ciclo, pesquisa e produto curto não chama o modelo ou devolve outro cursor.
+- A jornada 4d já não partilha o ecrã entre quem escreve e quem investiga. A 10 não confirma a memória apagada. A 12 não confirma o filho apagado. A mensagem não confiável de um bot espera pelo estado na base até estourar o tempo. A 16 recebe 500 ao ler um ficheiro do computador.
+- Os destinos de menção não gravam a mensagem, o reenvio falha, o segundo envio concorrente não espera, e o envio 1:1 com intenção de conector responde 404.
+- Um ficheiro de imagem responde 200 onde o teste espera 409.
+- A pesquisa devolve outra lista de tipos.
+- A contabilidade de uso pede um modelo nas definições antes de correr o bot.
