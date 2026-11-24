@@ -37,9 +37,9 @@ describe("createLiteLLM", () => {
         expect(String(url)).toContain("summarize=false");
         return json({
           data: [
-            { spend: 1.5, metadata: { bot_id: "bot-1" } },
-            { spend: 0.5, metadata: { bot_id: "bot-1" } },
-            { spend: 4, metadata: { user_api_key_alias: "hive-bot-9" } },
+            { spend: 1.5, total_tokens: 10, metadata: { bot_id: "bot-1" } },
+            { spend: 0.5, prompt_tokens: 3, completion_tokens: 1, metadata: { bot_id: "bot-1" } },
+            { spend: 4, total_tokens: 8, metadata: { user_api_key_alias: "hive-bot-9" } },
             { spend: 3, metadata: {} },
           ],
         });
@@ -55,15 +55,15 @@ describe("createLiteLLM", () => {
       await client.generate({ model: "ollama/qwen", budgetUsd: 12, botId: "bot-1", orgId: "org-1" }),
     ).toEqual({ key: "sk-bot", keyAlias: "hive-bot-1" });
     expect(await client.spendLogs("2026-11-01", "2026-11-30")).toEqual([
-      { botId: "bot-1", spendUsd: 2 },
-      { botId: "bot-9", spendUsd: 4 },
+      { botId: "bot-1", spendUsd: 2, tokens: 14 },
+      { botId: "bot-9", spendUsd: 4, tokens: 8 },
     ]);
     const listed = createLiteLLM(
       { baseUrl: "http://litellm.test", masterKey: "master" },
       (async () => json([{ spend: 1, metadata: { bot_id: "bot-2" } }])) as unknown as typeof fetch,
     );
     expect(await listed.spendLogs("2026-11-01", "2026-12-01")).toEqual([
-      { botId: "bot-2", spendUsd: 1 },
+      { botId: "bot-2", spendUsd: 1, tokens: 0 },
     ]);
   });
 
@@ -100,12 +100,12 @@ describe("rollupDepartmentSpend", () => {
   it("adds a bot's spend to each department it belongs to", () => {
     expect(
       rollupDepartmentSpend([
-        { departments: ["Desk", "Todos"], spendUsd: 2 },
-        { departments: ["Desk"], spendUsd: 1 },
+        { departments: ["Desk", "Todos"], spendUsd: 2, tokens: 10 },
+        { departments: ["Desk"], spendUsd: 1, tokens: 4 },
       ]),
     ).toEqual([
-      { name: "Desk", spendUsd: 3 },
-      { name: "Todos", spendUsd: 2 },
+      { name: "Desk", spendUsd: 3, tokens: 14 },
+      { name: "Todos", spendUsd: 2, tokens: 10 },
     ]);
   });
 });

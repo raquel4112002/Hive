@@ -106,6 +106,8 @@ async function main() {
     process.env.DATA_DIR = path.join(reportDir, "data");
     process.env.SIGNUPS_ENABLED = "true";
     process.env.SIGNUP_ALLOWLIST = "";
+    // The suite signs up many accounts. Production leaves this unset, which closes signup after the first organization.
+    process.env.HIVE_ALLOW_SIGNUP = "true";
     // Model and speech fixtures listen on loopback, and most test accounts are not the owner.
     process.env.MCP_ALLOW_PRIVATE_ENDPOINT = "true";
     if (!integration) {

@@ -73,7 +73,6 @@ describe("routine history", () => {
           routineId: "routine-1",
           botId: "bot-1",
           spaceId: actor.spaceId,
-          userId: actor.userId,
         },
         take: 21,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -176,9 +175,39 @@ describe("routine history", () => {
           routineId: "routine-1",
           botId: "bot-1",
           spaceId: actor.spaceId,
-          userId: actor.userId,
           OR: [{ createdAt: { lt: at } }, { createdAt: at, id: { lt: "run-11" } }],
         },
+      }),
+    );
+  });
+  it("shows a budget failure even when the service account owns the run", async () => {
+    const { prisma, runs } = fixture();
+    runs.mockResolvedValue([
+      {
+        id: "run-budget",
+        botId: "bot-1",
+        threadId: "thread-service",
+        thread: { groupId: null },
+        status: "failed",
+        error: "This bot has reached its monthly budget.",
+        createdAt: at,
+        startedAt: at,
+        completedAt: at,
+      },
+    ]);
+    const history = await listRoutineRuns(prisma, actor, "routine-1");
+    expect(history.runs).toEqual([
+      expect.objectContaining({
+        id: "run-budget",
+        status: "failed",
+        error: "This bot has reached its monthly budget.",
+        createdAt: at.toISOString(),
+        completedAt: at.toISOString(),
+      }),
+    ]);
+    expect(runs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { routineId: "routine-1", botId: "bot-1", spaceId: actor.spaceId },
       }),
     );
   });

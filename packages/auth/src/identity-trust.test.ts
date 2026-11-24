@@ -383,6 +383,79 @@ describe("identity trust through auth endpoints", () => {
     });
   });
 
+  it("refuses a second public signup once an organization exists", async () => {
+    const previous = process.env.HIVE_ALLOW_SIGNUP;
+    process.env.HIVE_ALLOW_SIGNUP = "false";
+    try {
+      const f = fixture();
+      Object.assign(f.prisma.organization, { count: async () => 1 });
+      const response = await f.signup("second@example.test");
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ code: "REGISTRATION_CLOSED" });
+      expect(bootstrapUserSpace).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.HIVE_ALLOW_SIGNUP;
+      else process.env.HIVE_ALLOW_SIGNUP = previous;
+    }
+  });
+
+  it("accepts an invite as USER in that organization", async () => {
+    const previous = process.env.HIVE_ALLOW_SIGNUP;
+    process.env.HIVE_ALLOW_SIGNUP = "false";
+    try {
+      const f = fixture();
+      Object.assign(f.prisma.organization, { count: async () => 1 });
+      const roles: Array<{ role: string; organizationId: string }> = [];
+      const invite = {
+        id: "inv-1",
+        organizationId: "org-9",
+        email: "approved@example.test",
+        role: "USER",
+        departmentIds: "dept-1",
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null as Date | null,
+      };
+      Object.assign(f.prisma, {
+        hiveInvite: {
+          findUnique: async () => ({ ...invite }),
+          updateMany: async () => {
+            if (invite.usedAt) return { count: 0 };
+            invite.usedAt = new Date();
+            return { count: 1 };
+          },
+        },
+        hiveRole: {
+          create: async ({ data }: { data: { role: string; organizationId: string } }) => {
+            roles.push(data);
+            return data;
+          },
+          findMany: async () => roles,
+        },
+        departmentMember: {
+          create: async () => ({}),
+          upsert: async () => ({}),
+          createMany: async () => ({ count: 0 }),
+        },
+        department: { findFirst: async () => ({ id: "todos" }) },
+        notificationPreference: { create: async () => ({}) },
+      });
+      Object.assign(f.prisma.member, { create: async () => ({}) });
+      Object.assign(f.prisma.spaceMember, { create: async () => ({}) });
+      const response = await f.request("/sign-up/email", {
+        email: "approved@example.test",
+        password: "offline-password12",
+        name: "Invited",
+        invite: "invite-token",
+      });
+      expect(response.status).toBe(200);
+      expect(roles).toEqual([expect.objectContaining({ organizationId: "org-9", role: "USER" })]);
+      expect(bootstrapUserSpace).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.HIVE_ALLOW_SIGNUP;
+      else process.env.HIVE_ALLOW_SIGNUP = previous;
+    }
+  });
+
   it("permits ordinary unverified signup without granting admin or mailbox proof on open deployments", async () => {
     const f = fixture({ delivery: false });
     const response = await f.signup();

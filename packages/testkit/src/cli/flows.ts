@@ -85,6 +85,7 @@ async function main() {
       BETTER_AUTH_URL: "http://127.0.0.1:5173",
       WEB_ORIGIN: "http://127.0.0.1:5173",
       SIGNUPS_ENABLED: "true",
+      HIVE_ALLOW_SIGNUP: "true",
       SIGNUP_ALLOWLIST: "",
       DATA_DIR: dataDir,
       LOG_LEVEL: "error",

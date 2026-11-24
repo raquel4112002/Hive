@@ -174,6 +174,7 @@ function performanceEnvironment(databaseUrl: string): NodeJS.ProcessEnv {
     RAKAZO_PERFORMANCE_ASSET_DELAY_MS: String(assetDelayMs),
     DATA_DIR: path.join(temporaryRoot, "data"),
     SIGNUPS_ENABLED: "true",
+    HIVE_ALLOW_SIGNUP: "true",
     SIGNUP_ALLOWLIST: "",
     PUBLIC_POSTHOG_KEY: "",
     CI: "",

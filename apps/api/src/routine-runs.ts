@@ -28,7 +28,6 @@ export async function listRoutineRuns(
       routineId,
       botId: routine.botId,
       spaceId: actor.spaceId,
-      userId: actor.userId,
       ...(before
         ? {
             OR: [

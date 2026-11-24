@@ -29,6 +29,7 @@ export * from "./expire-stuck-run.js";
 export * from "./external-conversations.js";
 export * from "./groups.js";
 export * from "./hive.js";
+export * from "./hive-invite.js";
 export * from "./hive-access.js";
 export * from "./history-retrieval.js";
 export * from "./memory-config.js";

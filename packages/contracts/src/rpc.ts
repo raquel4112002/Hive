@@ -1378,11 +1378,22 @@ export const appContract = {
             name: z.string(),
             departments: z.array(z.string()),
             spendUsd: z.number(),
+            tokens: z.number(),
           }),
         ),
-        departments: z.array(z.object({ name: z.string(), spendUsd: z.number() })),
+        departments: z.array(z.object({ name: z.string(), spendUsd: z.number(), tokens: z.number() })),
       }),
     ),
+    departments: oc.output(z.array(z.object({ id: Id, name: z.string() }))),
+    invite: oc
+      .input(
+        z.object({
+          email: z.string().trim().email(),
+          role: z.enum(["ADMIN", "USER"]),
+          departmentIds: z.array(Id).max(20),
+        }),
+      )
+      .output(z.object({ link: z.string(), expiresAt: z.string() })),
   },
   posts: {
     list: oc.input(z.object({ botId: Id })).output(

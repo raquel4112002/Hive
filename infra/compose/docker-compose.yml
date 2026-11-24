@@ -87,6 +87,8 @@ x-app-environment: &app-environment
   HIVE_DEFAULT_MODEL:
   HIVE_LITELLM_BASE_URL:
   HIVE_LITELLM_MASTER_KEY:
+  # Public signup stays off after the first organization unless this is true.
+  HIVE_ALLOW_SIGNUP:
   PI_DEFAULT_CREDENTIALS:
   PI_SESSION_RECORDING:
   RAKAZO_LIVE_MODEL_CATALOG:

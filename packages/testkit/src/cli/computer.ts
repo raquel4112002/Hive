@@ -37,6 +37,7 @@ async function main() {
     WEB_ORIGIN: "http://127.0.0.1:5173",
     DATA_DIR: dataDir,
     SIGNUPS_ENABLED: "true",
+    HIVE_ALLOW_SIGNUP: "true",
     SIGNUP_ALLOWLIST: "",
   };
   try {

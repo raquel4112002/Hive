@@ -184,15 +184,15 @@ export function CreateBotDialog({
                 </select>
               </label>
               <Input
-                aria-label={t`Monthly budget`}
-                placeholder={t`Monthly budget`}
+                aria-label="Monthly budget"
+                placeholder="Monthly budget"
                 inputMode="decimal"
                 value={budget}
                 onChange={(event) => setBudget(event.target.value)}
               />
               <Input
-                aria-label={t`Existing key`}
-                placeholder={t`Existing key`}
+                aria-label="Existing key"
+                placeholder="Existing key"
                 type="password"
                 autoComplete="off"
                 value={modelKey}

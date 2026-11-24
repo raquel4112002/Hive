@@ -4,7 +4,7 @@ export type LiteLLMConfig = { baseUrl: string; masterKey: string };
 
 export type LiteLLMKey = { key: string; keyAlias: string };
 
-export type LiteLLMSpendRow = { botId: string; spendUsd: number };
+export type LiteLLMSpendRow = { botId: string; spendUsd: number; tokens: number };
 
 export function hiveLiteLLM(env: NodeJS.ProcessEnv = process.env): LiteLLMConfig | null {
   const baseUrl = env.HIVE_LITELLM_BASE_URL?.trim().replace(/\/$/, "");
@@ -21,6 +21,21 @@ export function liteLLMModelBaseUrl(config: LiteLLMConfig): string {
 type FetchLike = typeof fetch;
 
 type SpendMeta = { bot_id?: string; user_api_key_alias?: string };
+
+type SpendLog = {
+  spend?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  metadata?: SpendMeta;
+};
+
+function tokensOf(row: SpendLog): number {
+  if (typeof row.total_tokens === "number" && Number.isFinite(row.total_tokens)) {
+    return row.total_tokens;
+  }
+  return Number(row.prompt_tokens ?? 0) + Number(row.completion_tokens ?? 0);
+}
 
 /** The proxy keeps bot_id on the key, and copies the key alias onto each request log. */
 function botIdFromSpend(metadata: SpendMeta | undefined): string | null {
@@ -113,28 +128,34 @@ export function createLiteLLM(config: LiteLLMConfig, fetchImpl: FetchLike = fetc
     async spendLogs(startDate: string, endDate: string): Promise<LiteLLMSpendRow[]> {
       const query = `start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&summarize=false`;
       const body = (await call(`/spend/logs?${query}`)) as
-        | Array<{ spend?: number; metadata?: SpendMeta }>
-        | { data?: Array<{ spend?: number; metadata?: SpendMeta }> };
+        | SpendLog[]
+        | { data?: SpendLog[] };
       const rows = Array.isArray(body) ? body : (body.data ?? []);
-      const totals = new Map<string, number>();
+      const totals = new Map<string, { spendUsd: number; tokens: number }>();
       for (const row of rows) {
         const botId = botIdFromSpend(row.metadata);
         if (!botId) continue;
-        totals.set(botId, (totals.get(botId) ?? 0) + Number(row.spend ?? 0));
+        const current = totals.get(botId) ?? { spendUsd: 0, tokens: 0 };
+        current.spendUsd += Number(row.spend ?? 0);
+        current.tokens += tokensOf(row);
+        totals.set(botId, current);
       }
-      return [...totals].map(([botId, spendUsd]) => ({ botId, spendUsd }));
+      return [...totals].map(([botId, total]) => ({ botId, ...total }));
     },
   };
 }
 
 export function rollupDepartmentSpend(
-  bots: Array<{ departments: string[]; spendUsd: number }>,
-): Array<{ name: string; spendUsd: number }> {
-  const totals = new Map<string, number>();
+  bots: Array<{ departments: string[]; spendUsd: number; tokens: number }>,
+): Array<{ name: string; spendUsd: number; tokens: number }> {
+  const totals = new Map<string, { spendUsd: number; tokens: number }>();
   for (const bot of bots) {
     for (const name of bot.departments) {
-      totals.set(name, (totals.get(name) ?? 0) + bot.spendUsd);
+      const current = totals.get(name) ?? { spendUsd: 0, tokens: 0 };
+      current.spendUsd += bot.spendUsd;
+      current.tokens += bot.tokens;
+      totals.set(name, current);
     }
   }
-  return [...totals].map(([name, spendUsd]) => ({ name, spendUsd }));
+  return [...totals].map(([name, total]) => ({ name, ...total }));
 }

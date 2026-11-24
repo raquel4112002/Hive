@@ -1,13 +1,16 @@
 # Hive modification: models for the optional LiteLLM profile.
 # Derived from Rakazo (Apache License 2.0).
-# Add another model as a second entry. Without model_info prices, spend stays at zero
-# and a monthly budget does not run out.
+# Add another model as a second entry. Local models are priced at zero, so a
+# monthly budget does not run out until these two prices are set above zero.
 
 model_list:
   - model_name: os.environ/HIVE_DEFAULT_MODEL
     litellm_params:
       model: os.environ/LITELLM_MODEL
       api_base: os.environ/LITELLM_API_BASE
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
 
 litellm_settings:
   drop_params: true

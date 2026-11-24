@@ -10,7 +10,14 @@ import {
   signupPolicyFromEnv,
 } from "@rakazo/core";
 import type { PrismaClient, SecurityEventType } from "@rakazo/db";
-import { bootstrapUserSpace, personalOrganizationIds, recordSecurityEvent } from "@rakazo/db";
+import {
+  acceptHiveInvite,
+  bootstrapUserSpace,
+  hivePublicSignupClosed,
+  peekHiveInvite,
+  personalOrganizationIds,
+  recordSecurityEvent,
+} from "@rakazo/db";
 import type { BetterAuthOptions, BetterAuthPlugin } from "better-auth";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -35,6 +42,7 @@ import {
 } from "./account-security.js";
 import { breachedPasswordCheck } from "./breached-password.js";
 import { passwordResetEmail, signInCodeEmail, verificationEmail } from "./email.js";
+import { rememberHiveInvite, takeHiveInvite } from "./hive-signup.js";
 import { hasRecentIdentityConfirmation, identityConfirmation } from "./identity-confirmation.js";
 import type { OidcConfig } from "./oidc.js";
 import { isCurrentOidcAccount, oidcDiscovery } from "./oidc.js";
@@ -389,25 +397,39 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             : undefined;
         let requireEmailVerification = false;
         if (ctx.path === "/sign-up/email") {
-          if (!policy?.enabled) {
-            throw new APIError("BAD_REQUEST", {
-              code: "REGISTRATION_CLOSED",
-              message: "Registration is closed",
-            });
-          }
           const email = String(ctx.body?.email ?? "");
-          if (!emailAllowed(email, policy.allowlist)) {
-            throw new APIError("BAD_REQUEST", {
-              code: "EMAIL_NOT_ALLOWED",
-              message: "Email is not allowed to register",
-            });
+          const inviteToken = String(
+            (ctx.body as { invite?: unknown } | null | undefined)?.invite ?? "",
+          ).trim();
+          const invited = inviteToken ? await peekHiveInvite(prisma, inviteToken, email) : false;
+          if (invited) {
+            rememberHiveInvite(email, inviteToken);
+          } else {
+            if (!policy?.enabled) {
+              throw new APIError("BAD_REQUEST", {
+                code: "REGISTRATION_CLOSED",
+                message: "Registration is closed",
+              });
+            }
+            if (!emailAllowed(email, policy.allowlist)) {
+              throw new APIError("BAD_REQUEST", {
+                code: "EMAIL_NOT_ALLOWED",
+                message: "Email is not allowed to register",
+              });
+            }
+            if (policy.allowlist.length > 0 && !env.email) {
+              throw new APIError("BAD_REQUEST", {
+                message: "Registration requires email delivery",
+              });
+            }
+            if (await hivePublicSignupClosed(prisma)) {
+              throw new APIError("BAD_REQUEST", {
+                code: "REGISTRATION_CLOSED",
+                message: "Registration is closed",
+              });
+            }
           }
-          if (policy.allowlist.length > 0 && !env.email) {
-            throw new APIError("BAD_REQUEST", {
-              message: "Registration requires email delivery",
-            });
-          }
-          requireEmailVerification = policy.allowlist.length > 0;
+          requireEmailVerification = !invited && (policy?.allowlist.length ?? 0) > 0;
         } else if (policy) {
           requireEmailVerification = policy.allowlist.length > 0;
         }
@@ -524,16 +546,22 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             // Only admitted sessions provision a workspace; never assign administration.
             const membership = await prisma.spaceMember.findFirst({ where: { userId: user.id } });
             if (!membership) {
-              if (
-                !policy.enabled ||
-                (!bypassAllowlist && !emailAllowed(user.email, policy.allowlist))
-              ) {
-                throw new APIError("FORBIDDEN", {
-                  code: "REGISTRATION_CLOSED",
-                  message: "Registration is closed",
-                });
+              const inviteToken = takeHiveInvite(user.email);
+              if (inviteToken) {
+                await acceptHiveInvite(prisma, user, inviteToken);
+              } else {
+                if (
+                  !policy.enabled ||
+                  (!bypassAllowlist && !emailAllowed(user.email, policy.allowlist)) ||
+                  (await hivePublicSignupClosed(prisma))
+                ) {
+                  throw new APIError("FORBIDDEN", {
+                    code: "REGISTRATION_CLOSED",
+                    message: "Registration is closed",
+                  });
+                }
+                await bootstrapUserSpace(prisma, user, env);
               }
-              await bootstrapUserSpace(prisma, user, env);
             }
           },
           after: async (session, ctx) => {

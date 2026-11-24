@@ -213,6 +213,7 @@ function configureEnvironment() {
     API_URL: HOST_API_URL,
     DATA_DIR,
     SIGNUPS_ENABLED: "true",
+    HIVE_ALLOW_SIGNUP: "true",
     SIGNUP_ALLOWLIST: "",
     CI: "1",
   });

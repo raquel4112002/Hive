@@ -169,7 +169,7 @@ export async function listBotSpend(deps: KeyDeps, spaceId: string, month: string
     `${month}-01`,
     `${endYear}-${String(endMonth).padStart(2, "0")}-01`,
   );
-  const spend = new Map(logs.map((row) => [row.botId, row.spendUsd]));
+  const spend = new Map(logs.map((row) => [row.botId, row]));
   const bots = await runAsSystem("hive bot spend", async () => {
     const rows = await deps.prisma.bot.findMany({
       where: { spaceId, litellmKey: { isNot: null } },
@@ -191,7 +191,8 @@ export async function listBotSpend(deps: KeyDeps, spaceId: string, month: string
         .filter((link) => link.botId === row.id)
         .map((link) => nameById.get(link.departmentId))
         .filter((name): name is string => Boolean(name)),
-      spendUsd: spend.get(row.id) ?? 0,
+      spendUsd: spend.get(row.id)?.spendUsd ?? 0,
+      tokens: spend.get(row.id)?.tokens ?? 0,
     }));
   });
   return { bots, departments: rollupDepartmentSpend(bots) };

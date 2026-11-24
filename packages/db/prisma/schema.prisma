@@ -2390,3 +2390,20 @@ model BotPostArtifact {
   @@index([postId])
   @@map("bot_post_artifacts")
 }
+
+/// Hive modification: one-time invitation into an existing organization.
+model HiveInvite {
+  id               String    @id @default(cuid())
+  organizationId   String
+  email            String
+  role             String
+  tokenHash        String    @unique
+  departmentIds    String    @default("")
+  expiresAt        DateTime
+  usedAt           DateTime?
+  createdByUserId  String
+  createdAt        DateTime  @default(now())
+
+  @@index([organizationId])
+  @@map("hive_invites")
+}

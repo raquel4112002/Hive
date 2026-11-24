@@ -5,6 +5,7 @@ import { ORPCError } from "@orpc/server";
 import { createLiteLLM, hiveLiteLLM, issueBotModelKey, listBotSpend } from "@rakazo/adapters";
 import {
   assignBotDepartment,
+  createHiveInvite,
   ensureEveryoneDepartment,
   inspectConversation,
   linkBotConnection,
@@ -12,6 +13,7 @@ import {
   readBotPostArtifact,
   readHiveRole,
   IsolationError,
+  runAsSystem,
   setBotPublication,
 } from "@rakazo/db";
 import type { RouterContext } from "./context.js";
@@ -59,12 +61,32 @@ export function hiveRoutes(ctx: RouterContext) {
         return { ok: true as const };
       }),
       modelCatalog: authed.hive.modelCatalog.handler(async ({ context }) => {
-        const hive = await readHiveRole(deps.prisma, context.actor);
+        await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
         const litellm = hiveLiteLLM();
-        if (!hive || hive.archived || hive.role === "USER" || !litellm) {
-          return { enabled: false, models: [] };
-        }
+        if (!litellm) return { enabled: false, models: [] };
         return { enabled: true, models: await createLiteLLM(litellm).models() };
+      }),
+      departments: authed.hive.departments.handler(async ({ context }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        return runAsSystem("hive departments", () =>
+          deps.prisma.department.findMany({
+            where: { organizationId: hive.organizationId },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+          }),
+        );
+      }),
+      invite: authed.hive.invite.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const created = await createHiveInvite(deps.prisma, {
+          organizationId: hive.organizationId,
+          createdByUserId: context.actor.userId,
+          email: input.email,
+          role: input.role,
+          departmentIds: input.departmentIds,
+          webOrigin: deps.env.webOrigin,
+        });
+        return { link: created.link, expiresAt: created.expiresAt.toISOString() };
       }),
       setModel: authed.hive.setModel.handler(async ({ context, input }) => {
         const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);

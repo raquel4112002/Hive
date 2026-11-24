@@ -22,9 +22,14 @@ export function HiveAssign({
   const [modelKey, setModelKey] = useState("");
   const [costs, setCosts] = useState<{
     month: string;
-    bots: { name: string; spendUsd: number }[];
-    departments: { name: string; spendUsd: number }[];
+    bots: { name: string; spendUsd: number; tokens: number }[];
+    departments: { name: string; spendUsd: number; tokens: number }[];
   } | null>(null);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"ADMIN" | "USER">("USER");
+  const [inviteDepartments, setInviteDepartments] = useState<string[]>([]);
+  const [inviteLink, setInviteLink] = useState("");
 
   useEffect(() => {
     let live = true;
@@ -34,6 +39,12 @@ export function HiveAssign({
         if (!live || !catalog.enabled) return;
         setModels(catalog.models);
         setModel(catalog.models[0] ?? "");
+      })
+      .catch(() => undefined);
+    rpc.hive
+      .departments()
+      .then((rows) => {
+        if (live) setDepartments(rows);
       })
       .catch(() => undefined);
     return () => {
@@ -153,7 +164,11 @@ export function HiveAssign({
             const report = await rpc.hive.spend({ month });
             setCosts({
               month: report.month,
-              bots: report.bots.map((row) => ({ name: row.name, spendUsd: row.spendUsd })),
+              bots: report.bots.map((row) => ({
+                name: row.name,
+                spendUsd: row.spendUsd,
+                tokens: row.tokens,
+              })),
               departments: report.departments,
             });
           });
@@ -166,15 +181,71 @@ export function HiveAssign({
           <span className="mr-3">{costs.month}</span>
           {costs.bots.map((row) => (
             <span key={row.name} className="mr-3">
-              {row.name} {row.spendUsd.toFixed(2)}
+              {row.name} {row.spendUsd.toFixed(2)} ({row.tokens})
             </span>
           ))}
           {costs.departments.map((row) => (
             <span key={`dept-${row.name}`} className="mr-3">
-              {row.name} {row.spendUsd.toFixed(2)}
+              {row.name} {row.spendUsd.toFixed(2)} ({row.tokens})
             </span>
           ))}
         </div>
+      ) : null}
+      <Input
+        aria-label="Email"
+        placeholder="Email"
+        className="h-8 w-44"
+        value={inviteEmail}
+        disabled={busy}
+        onChange={(event) => setInviteEmail(event.target.value)}
+      />
+      <select
+        aria-label="Role"
+        className="h-8 rounded-md border border-border bg-background px-2 text-sm"
+        value={inviteRole}
+        disabled={busy}
+        onChange={(event) => setInviteRole(event.target.value === "ADMIN" ? "ADMIN" : "USER")}
+      >
+        <option value="USER">User</option>
+        <option value="ADMIN">Admin</option>
+      </select>
+      {departments.map((department) => (
+        <label key={department.id} className="flex items-center gap-1 text-sm">
+          <input
+            type="checkbox"
+            checked={inviteDepartments.includes(department.id)}
+            disabled={busy}
+            onChange={(event) => {
+              setInviteDepartments((current) =>
+                event.target.checked
+                  ? [...current, department.id]
+                  : current.filter((id) => id !== department.id),
+              );
+            }}
+          />
+          {department.name}
+        </label>
+      ))}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={busy || !inviteEmail.trim()}
+        onClick={() => {
+          void run(async () => {
+            const created = await rpc.hive.invite({
+              email: inviteEmail.trim(),
+              role: inviteRole,
+              departmentIds: inviteDepartments,
+            });
+            setInviteLink(created.link);
+          });
+        }}
+      >
+        Invite
+      </Button>
+      {inviteLink ? (
+        <Input aria-label="Invite link" readOnly className="h-8 w-64" value={inviteLink} />
       ) : null}
     </div>
   );

@@ -28,7 +28,7 @@ Antes da chamada ao modelo, o Hive lê `GET /key/info`. Se `spend` atingiu `max_
 
 ## Custos
 
-O ecrã de administração lê `GET /spend/logs` do mês e mostra o gasto por bot e por departamento. Um bot em dois departamentos entra nos dois totais. `USER` recebe 404. Sem proxy, a lista vem vazia e o catálogo de modelos vem desligado.
+O ecrã de administração lê `GET /spend/logs?summarize=false` do mês. Cada linha entra no bot pelo `metadata.bot_id` ou, quando o log só traz o alias, por `user_api_key_alias` com o prefixo `hive-`. O ecrã mostra dólares e tokens, por bot e por departamento. Um bot em dois departamentos entra nos dois totais. O `config.yaml` do proxy deixa os modelos locais a 0 por token, por isso o dinheiro fica em 0.00 até alguém definir um preço. `USER` recebe 404. Sem proxy, a lista vem vazia e o catálogo de modelos vem desligado.
 
 ## Testes
 

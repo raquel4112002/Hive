@@ -18,6 +18,8 @@ docker compose --env-file .env -f infra/compose/docker-compose.yml up --build
 5. Open `http://127.0.0.1:5173`.
 6. Choose Sign up. The first account is the super-admin. The app opens a bot; the message box is how you talk to it.
 
+After that account exists, public signup stays off (`HIVE_ALLOW_SIGNUP=false`). A later signup does not create another organization and does not become a super-admin. An admin invites the next person from the bot panel: email, role (`ADMIN` or `USER`), and departments. The link expires after seven days and works once. The person opens it, signs up with that email, and joins the same organization. Set `HIVE_ALLOW_SIGNUP=true` only when a new public organization should be allowed.
+
 `RAKAZO_IMAGE` in `.env` names `hive/app`. The checkout Compose file builds the app services itself. Set `RAKAZO_IMAGE` to a registry path only when you pull images instead of building them. The variable names stay `RAKAZO_*`.
 
 ## Model
@@ -63,6 +65,6 @@ LITELLM_API_BASE=http://host.docker.internal:11434
 docker compose --env-file .env -f infra/compose/docker-compose.prod.yml --profile litellm up -d
 ```
 
-Another model is another entry in `infra/compose/litellm.yaml`. A model with no price reports no spend, so a monthly budget does not run out. Set `model_info.input_cost_per_token` and `output_cost_per_token` on that entry.
+Another model is another entry in `infra/compose/litellm.yaml`. The shipped file sets `input_cost_per_token` and `output_cost_per_token` to 0. Ollama has no price of its own, so dollars stay at 0.00 and a monthly budget does not run out. Costs still shows the token count beside the dollars. A trial priced each output token at 0.02 so a budget could run out; that temporary price is what the Costs screen added up as 22.53 and 5.81. Those numbers are not the product default. Set the two prices above zero only when a monthly budget should be able to run out.
 
 More detail on secrets, models, and production TLS is in [docs/self-host.md](../self-host.md) and [docs/self-host-secrets.md](../self-host-secrets.md).

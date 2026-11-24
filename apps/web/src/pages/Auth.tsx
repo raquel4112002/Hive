@@ -20,12 +20,34 @@ import { authErrorText, credentialIssueText } from "../lib/user-error";
 type AuthMode = "in" | "up" | "forgot";
 
 const fieldClass = "mt-2 h-12 rounded-xl px-4 text-base md:text-base";
+
+async function signUpWithInvite(input: {
+  email: string;
+  password: string;
+  name: string;
+  invite: string;
+}) {
+  const response = await fetch("/api/auth/sign-up/email", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = (await response.json().catch(() => null)) as {
+    code?: string;
+    message?: string;
+    token?: string | null;
+  } | null;
+  if (!response.ok) return { error: data ?? { message: "Could not continue" }, data: null };
+  return { error: null, data };
+}
 const CODE_LENGTH = 6;
 export const submitClass = "mt-3 h-12 w-full rounded-xl text-base";
 
 export function AuthPage({ mode }: { mode: AuthMode }) {
   const { t } = useLingui();
   const [searchParams, setSearchParams] = useSearchParams();
+  const invite = searchParams.get("invite") ?? "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -129,13 +151,21 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         setCodeSent(true);
         return;
       }
+      const accountName = name || trimmedEmail.split("@")[0] || "User";
       const result =
         mode === "up"
-          ? await authClient.signUp.email({
-              email: trimmedEmail,
-              password,
-              name: name || trimmedEmail.split("@")[0] || "User",
-            })
+          ? invite
+            ? await signUpWithInvite({
+                email: trimmedEmail,
+                password,
+                name: accountName,
+                invite,
+              })
+            : await authClient.signUp.email({
+                email: trimmedEmail,
+                password,
+                name: accountName,
+              })
           : await authClient.signIn.email({ email: trimmedEmail, password });
       if (result.error) {
         setError(authErrorText(result.error, t`Could not continue`));
