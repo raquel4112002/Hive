@@ -19,6 +19,7 @@ import {
   isMessagingChannelRun,
   isOwnerStartedRun,
   isTerminal,
+  BUDGET_EXCEEDED_RUN_ERROR,
   MISSING_MODEL_RUN_ERROR,
   MODEL_ACCESS_REQUIRED_RUN_ERROR,
   messagingChannelId,
@@ -84,6 +85,7 @@ import {
 } from "./connection-context.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
+import { peekBotModel } from "./bot-model-key.js";
 import { hiveInstallationModel, hiveRunModel } from "./hive-installation-model.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import type { FleetRun } from "./fleet-tools.js";
@@ -771,7 +773,18 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           );
         }
         const installation = hiveInstallationModel();
-        const hiveChoice = installation ? hiveRunModel(modelChoice, installation) : null;
+        const botModel = await peekBotModel(deps.prisma, run.botId);
+        const hiveChoice =
+          botModel && installation
+            ? hiveRunModel(
+                { modelProvider: installation.provider, modelId: botModel.model },
+                installation,
+              )
+            : botModel
+              ? { provider: installation?.provider ?? "openai-compatible", model: botModel.model }
+              : installation
+                ? hiveRunModel(modelChoice, installation)
+                : null;
         const runDeployment = hiveChoice
           ? { provider: hiveChoice.provider, model: hiveChoice.model }
           : deps.deploymentModelConfigured
@@ -898,6 +911,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 selectedProvider,
                 selectedModelId,
                 (values) => runSecrets.push(...values),
+                { botId: scripted ? undefined : run.botId },
               ),
             };
           } catch (error) {
@@ -909,7 +923,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               message: error instanceof Error ? error.message : "Connect the provider again.",
               accountFailure:
                 error instanceof HostedModelCreditsRequiredError ||
-                isRetiredModelCredentialError(error),
+                isRetiredModelCredentialError(error) ||
+                (error instanceof Error && error.message === BUDGET_EXCEEDED_RUN_ERROR),
             };
             if (!terminal) retryPrimary = error;
           }

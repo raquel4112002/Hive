@@ -1,4 +1,4 @@
-import { destroyBot } from "@rakazo/adapters";
+import { destroyBot, revokeBotModelKey } from "@rakazo/adapters";
 import type { Actor } from "@rakazo/contracts";
 import type { createRepos } from "@rakazo/db";
 import type { RouterDeps } from "./router.js";
@@ -10,6 +10,15 @@ export function createBotRemoval(deps: RouterDeps, repos: ReturnType<typeof crea
     options: Parameters<typeof destroyBot>[3],
   ) => {
     const bot = await repos.getBot(actor, botId, { includeArchived: true });
+    await revokeBotModelKey(
+      {
+        prisma: deps.prisma,
+        secretStore: deps.secrets,
+        mcpAllowPrivateEndpoint: deps.env.mcpAllowPrivateEndpoint,
+      },
+      bot.id,
+      "delete",
+    );
     await destroyBot(
       {
         prisma: deps.prisma,

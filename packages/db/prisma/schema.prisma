@@ -689,6 +689,8 @@ model Bot {
   fleetManagement        Boolean @default(true)
   /// Hive modification: a publication bot has a shared feed and no user conversation.
   publication            Boolean @default(false)
+  /// Hive modification: the bot's LiteLLM key, when the admin issued or pasted one.
+  litellmKey             BotLiteLLMKey?
   routines          Routine[]
   scratchpadItems   ScratchpadItem[]
   taughtSkills      TaughtSkill[]
@@ -2280,6 +2282,23 @@ model BotAssignment {
   @@unique([botId, userId])
   @@index([userId])
   @@map("bot_assignments")
+}
+
+/// Hive modification: one LiteLLM key for a bot. The ciphertext is a SECRET_STORE record.
+model BotLiteLLMKey {
+  botId       String   @id
+  bot         Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  spaceId     String
+  keyAlias    String
+  ciphertext  String
+  model       String
+  budgetCents Int?
+  pasted      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([spaceId])
+  @@map("bot_litellm_keys")
 }
 
 model BotDepartmentAssignment {

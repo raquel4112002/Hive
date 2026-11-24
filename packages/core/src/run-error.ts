@@ -28,6 +28,9 @@ export const MODEL_REQUEST_LIMIT_ERROR =
 
 export const MISSING_MODEL_RUN_ERROR = "Connect a model in Settings before running bots.";
 
+/** The bot's LiteLLM key has spent its monthly budget. */
+export const BUDGET_EXCEEDED_RUN_ERROR = "This bot has reached its monthly budget.";
+
 /** A deployment model run while the organization has not chosen Rakazo credits. */
 export const HOSTED_MODEL_CREDITS_REQUIRED_ERROR =
   "Connect your own API key in Models or choose Rakazo credits in Billing.";
@@ -108,6 +111,7 @@ const MODEL_CONNECTION_RUN_ERRORS = new Set([
 const APP_RUN_ERRORS = new Set([
   ...MODEL_OUTPUT_RUN_ERRORS,
   ...MODEL_CONNECTION_RUN_ERRORS,
+  BUDGET_EXCEEDED_RUN_ERROR,
   MODEL_ACCESS_REQUIRED_RUN_ERROR,
   COMPUTER_RATE_LIMIT_ERROR,
   COMPUTER_ALLOWANCE_USED_ERROR,

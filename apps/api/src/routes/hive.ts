@@ -1,6 +1,8 @@
 // Hive modification: organization connections and conversation inspect.
 // Derived from Rakazo (Apache License 2.0).
 
+import { ORPCError } from "@orpc/server";
+import { createLiteLLM, hiveLiteLLM, issueBotModelKey, listBotSpend } from "@rakazo/adapters";
 import {
   assignBotDepartment,
   ensureEveryoneDepartment,
@@ -13,6 +15,20 @@ import {
   setBotPublication,
 } from "@rakazo/db";
 import type { RouterContext } from "./context.js";
+
+function keyDeps(ctx: RouterContext) {
+  return {
+    prisma: ctx.deps.prisma,
+    secretStore: ctx.deps.secrets,
+    mcpAllowPrivateEndpoint: ctx.deps.env.mcpAllowPrivateEndpoint,
+  };
+}
+
+async function requireHiveAdmin(ctx: RouterContext, userId: string, spaceId: string) {
+  const hive = await readHiveRole(ctx.deps.prisma, { userId, spaceId });
+  if (!hive || hive.archived || hive.role === "USER") throw new IsolationError();
+  return hive;
+}
 
 export function hiveRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;
@@ -41,6 +57,48 @@ export function hiveRoutes(ctx: RouterContext) {
       setPublication: authed.hive.setPublication.handler(async ({ context, input }) => {
         await setBotPublication(deps.prisma, context.actor, input.botId, input.publication);
         return { ok: true as const };
+      }),
+      modelCatalog: authed.hive.modelCatalog.handler(async ({ context }) => {
+        const hive = await readHiveRole(deps.prisma, context.actor);
+        const litellm = hiveLiteLLM();
+        if (!hive || hive.archived || hive.role === "USER" || !litellm) {
+          return { enabled: false, models: [] };
+        }
+        return { enabled: true, models: await createLiteLLM(litellm).models() };
+      }),
+      setModel: authed.hive.setModel.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const bot = await deps.prisma.bot.findFirst({
+          where: { id: input.botId, spaceId: context.actor.spaceId },
+          select: { id: true },
+        });
+        if (!bot) throw new IsolationError();
+        try {
+          await issueBotModelKey(keyDeps(ctx), {
+            botId: input.botId,
+            spaceId: context.actor.spaceId,
+            orgId: hive.organizationId,
+            model: input.model,
+            monthlyBudget: input.monthlyBudget,
+            modelKey: input.modelKey,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Could not save the model key.";
+          if (
+            message === "LiteLLM is not configured." ||
+            message === "Choose a model." ||
+            message.startsWith("LiteLLM ")
+          ) {
+            throw new ORPCError("BAD_REQUEST", { message });
+          }
+          throw error;
+        }
+        return { ok: true as const };
+      }),
+      spend: authed.hive.spend.handler(async ({ context, input }) => {
+        await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const report = await listBotSpend(keyDeps(ctx), context.actor.spaceId, input.month);
+        return { month: input.month, ...report };
       }),
       inspectConversation: authed.hive.inspectConversation.handler(async ({ context, input }) => {
         const opened = await inspectConversation(deps.prisma, context.actor, input);

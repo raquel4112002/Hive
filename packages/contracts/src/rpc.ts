@@ -1358,6 +1358,31 @@ export const appContract = {
     setPublication: oc
       .input(z.object({ botId: Id, publication: z.boolean() }))
       .output(z.object({ ok: z.literal(true) })),
+    modelCatalog: oc.output(z.object({ enabled: z.boolean(), models: z.array(z.string()) })),
+    setModel: oc
+      .input(
+        z.object({
+          botId: Id,
+          model: z.string().trim().min(1).max(200),
+          monthlyBudget: z.number().positive().max(1_000_000).nullable().optional(),
+          modelKey: z.string().trim().min(1).max(500).optional(),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+    spend: oc.input(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/) })).output(
+      z.object({
+        month: z.string(),
+        bots: z.array(
+          z.object({
+            botId: Id,
+            name: z.string(),
+            departments: z.array(z.string()),
+            spendUsd: z.number(),
+          }),
+        ),
+        departments: z.array(z.object({ name: z.string(), spendUsd: z.number() })),
+      }),
+    ),
   },
   posts: {
     list: oc.input(z.object({ botId: Id })).output(

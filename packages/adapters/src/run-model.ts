@@ -11,10 +11,11 @@ import {
   cloudflareModelConfigMessage,
   OPENAI_COMPATIBLE_PROVIDER_ID,
 } from "@rakazo/contracts";
-import { MISSING_MODEL_RUN_ERROR } from "@rakazo/core";
+import { BUDGET_EXCEEDED_RUN_ERROR, MISSING_MODEL_RUN_ERROR } from "@rakazo/core";
 import { hiveModelSource, hiveServiceBot, INSTALLATION_MODEL_RECORD_ID } from "@rakazo/db";
 import { cloudflareProviderEnv } from "./cloudflare-ai-gateway.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
+import { loadBotRunKey } from "./bot-model-key.js";
 import { hiveInstallationModel } from "./hive-installation-model.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import type { FleetPrepareDeps } from "./fleet-tools.js";
@@ -61,7 +62,8 @@ export function isTerminalModelSetupError(error: unknown): boolean {
     error instanceof HostedModelCreditsRequiredError ||
     isRetiredModelCredentialError(error) ||
     (error instanceof Error &&
-      (error.message === CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE ||
+      (error.message === BUDGET_EXCEEDED_RUN_ERROR ||
+        error.message === CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE ||
         error.message === cloudflareModelConfigMessage(CLOUDFLARE_WORKERS_AI_PROVIDER_ID)))
   );
 }
@@ -199,7 +201,7 @@ async function resolveModelKeyMaterial(
   provider: string,
   modelId: string,
   registerSecrets?: (values: string[]) => void,
-  { requireStoredSecret = false }: { requireStoredSecret?: boolean } = {},
+  { requireStoredSecret = false, botId }: { requireStoredSecret?: boolean; botId?: string } = {},
 ): Promise<{
   apiKey?: string;
   accountId?: string;
@@ -379,6 +381,14 @@ async function resolveModelKeyMaterial(
   }
   if (requireStoredSecret) throw new Error("Backup model credential is no longer available");
   if (provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
+    if (botId && !deps.runtime?.describe().capabilities.scripted) {
+      const own = await loadBotRunKey(deps, botId);
+      if (own) {
+        const redact = [own.apiKey];
+        registerSecrets?.(redact);
+        return { apiKey: own.apiKey, baseUrl: own.baseUrl, allowPrivateEndpoint: own.allowPrivate, redact };
+      }
+    }
     const fromEnv = hiveInstallationModel();
     if (fromEnv) {
       const allowPrivateEndpoint = deps.mcpAllowPrivateEndpoint === true;

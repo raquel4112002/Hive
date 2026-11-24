@@ -15,6 +15,9 @@ import {
   stopCancelledGroupRuns,
   storeBotSecret,
   toComputerRef,
+  issueBotModelKey,
+  revokeBotModelKey,
+  unblockBotModelKey,
   validateBotModelChange,
 } from "@rakazo/adapters";
 import type {
@@ -28,6 +31,7 @@ import { BotSecretAuth, resolveBotAvatarSet } from "@rakazo/contracts";
 import { ACTIVE_RUN_STATUSES, displayName } from "@rakazo/core";
 import type { Prisma } from "@rakazo/db";
 import {
+  readHiveRole,
   BotSectionNameConflictError,
   botProfileLabelsChanged,
   ComputerLimitError,
@@ -195,6 +199,14 @@ export function botIntroPrompt(input: {
  * asks what the bot is for. The executor limits the "created" trigger to that question and the
  * bot's own profile, and answering resumes the run as the user's turn.
  */
+function modelKeyDeps(deps: RouterDeps) {
+  return {
+    prisma: deps.prisma,
+    secretStore: deps.secrets,
+    mcpAllowPrivateEndpoint: deps.env.mcpAllowPrivateEndpoint,
+  };
+}
+
 export async function enqueueBotIntroRun(deps: RouterDeps, actor: Actor, bot: Bot): Promise<void> {
   const threadId = bot.threadId;
   if (!threadId) return;
@@ -264,6 +276,31 @@ export function botsRoutes(ctx: RouterContext) {
           bot = await repos.createBot(context.actor, input);
         } catch (error) {
           throw mapSpaceLifecycleError(error);
+        }
+        if (input.model || input.modelKey) {
+          const hive = await readHiveRole(deps.prisma, context.actor);
+          try {
+            await issueBotModelKey(modelKeyDeps(deps), {
+              botId: bot.id,
+              spaceId: context.actor.spaceId,
+              orgId: hive?.organizationId ?? context.actor.spaceId,
+              model: input.model ?? "",
+              monthlyBudget: input.monthlyBudget,
+              modelKey: input.modelKey,
+            });
+          } catch (error) {
+            await revokeBotModelKey(modelKeyDeps(deps), bot.id, "delete").catch(() => undefined);
+            await removeBot(context.actor, bot.id, { deleteMemories: true }).catch(() => undefined);
+            const message = error instanceof Error ? error.message : "Could not create bot";
+            if (
+              message === "LiteLLM is not configured." ||
+              message === "Choose a model." ||
+              message.startsWith("LiteLLM ")
+            ) {
+              throw new ORPCError("BAD_REQUEST", { message });
+            }
+            throw error;
+          }
         }
         await enqueueBotIntroRun(deps, context.actor, bot).catch((error) => {
           getLogger().error("bot intro run enqueue", error);
@@ -504,6 +541,7 @@ export function botsRoutes(ctx: RouterContext) {
       }),
       archive: authed.bots.archive.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId, { includeArchived: true });
+        await revokeBotModelKey(modelKeyDeps(deps), bot.id, "block");
         await archiveBot(
           {
             prisma: deps.prisma,
@@ -534,6 +572,9 @@ export function botsRoutes(ctx: RouterContext) {
         } catch (error) {
           throw mapSpaceLifecycleError(error);
         }
+        await unblockBotModelKey(modelKeyDeps(deps), bot.id).catch((error) => {
+          getLogger().error("bot model key unblock", error instanceof Error ? error.message : "failed");
+        });
         return { ok: true as const };
       }),
       remove: authed.bots.remove.handler(async ({ context, input }) => {

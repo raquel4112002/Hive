@@ -22,7 +22,7 @@ docker compose --env-file .env -f infra/compose/docker-compose.yml up --build
 
 ## Model
 
-Hive uses one OpenAI-compatible endpoint for the installation. Set all three, or none. A bot can name its own model later; until it has its own key it uses this one. To move to LiteLLM, change these three values and recreate the API and worker. Nothing in the code names a host, a key, or a model.
+Hive uses one OpenAI-compatible endpoint when a bot has no key of its own. Set all three, or none. Nothing in the code names a host, a key, or a model.
 
 On Docker Desktop the containers reach Ollama on the Windows host through `host.docker.internal`. `ollama list` shows the model id. Ollama does not check the key; the client still sends one.
 
@@ -33,6 +33,36 @@ HIVE_DEFAULT_MODEL=qwen3.5:2b
 MCP_ALLOW_PRIVATE_ENDPOINT=true
 ```
 
-`MCP_ALLOW_PRIVATE_ENDPOINT=true` lets the API and worker call that private address. Recreate the API and worker after changing `.env`.
+`MCP_ALLOW_PRIVATE_ENDPOINT=true` lets the API and worker call that private address.
+
+A LiteLLM proxy is optional. Set both values, or neither. They stay in `.env` and are not sent to the browser. The admin URL is the proxy root, without `/v1`. When they are set, creating a bot can issue a key for one model and an optional monthly budget. Runs use that key. When they are blank, runs keep using the three values above.
+
+```env
+HIVE_LITELLM_BASE_URL=http://127.0.0.1:4000
+HIVE_LITELLM_MASTER_KEY=
+```
+
+Recreate the API and worker after changing `.env`. The key, the budget, and the cost screen are described in [PHASE3.md](PHASE3.md).
+
+## LiteLLM on the production Compose file
+
+`infra/compose/docker-compose.prod.yml` can run the proxy and a database that belongs only to it. A plain `up` leaves both stopped. They start with the `litellm` profile.
+
+Set a password for that database, the master key, the model name Hive should list, and the upstream model. Inside Compose the API and worker call `http://litellm:4000`. The admin UI is on the host at `http://127.0.0.1:4000`.
+
+```env
+LITELLM_DB_PASSWORD=
+HIVE_LITELLM_MASTER_KEY=
+HIVE_LITELLM_BASE_URL=http://litellm:4000
+HIVE_DEFAULT_MODEL=qwen3.5:2b
+LITELLM_MODEL=ollama/qwen3.5:2b
+LITELLM_API_BASE=http://host.docker.internal:11434
+```
+
+```bash
+docker compose --env-file .env -f infra/compose/docker-compose.prod.yml --profile litellm up -d
+```
+
+Another model is another entry in `infra/compose/litellm.yaml`. A model with no price reports no spend, so a monthly budget does not run out. Set `model_info.input_cost_per_token` and `output_cost_per_token` on that entry.
 
 More detail on secrets, models, and production TLS is in [docs/self-host.md](../self-host.md) and [docs/self-host-secrets.md](../self-host-secrets.md).

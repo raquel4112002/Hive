@@ -364,7 +364,11 @@ export function ShellDialogs({
       />
 
       {createBotOpen ? (
-        <CreateBotDialog onCancel={() => setCreateBotOpen(false)} onCreate={createBot} />
+        <CreateBotDialog
+          onCancel={() => setCreateBotOpen(false)}
+          onCreate={createBot}
+          loadModels={() => rpc.hive.modelCatalog()}
+        />
       ) : null}
 
       {newSpaceOpen ? (

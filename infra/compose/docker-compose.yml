@@ -81,10 +81,12 @@ x-app-environment: &app-environment
   # Models
   PI_DEFAULT_PROVIDER:
   PI_DEFAULT_MODEL:
-  # One OpenAI-compatible endpoint for the installation. LiteLLM is the same three values.
+  # Fallback OpenAI-compatible endpoint. A bot key, when LiteLLM issued one, wins.
   HIVE_MODEL_BASE_URL:
   HIVE_MODEL_API_KEY:
   HIVE_DEFAULT_MODEL:
+  HIVE_LITELLM_BASE_URL:
+  HIVE_LITELLM_MASTER_KEY:
   PI_DEFAULT_CREDENTIALS:
   PI_SESSION_RECORDING:
   RAKAZO_LIVE_MODEL_CATALOG:

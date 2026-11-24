@@ -92,6 +92,8 @@ x-app-environment: &app-environment
   HIVE_MODEL_BASE_URL:
   HIVE_MODEL_API_KEY:
   HIVE_DEFAULT_MODEL:
+  HIVE_LITELLM_BASE_URL:
+  HIVE_LITELLM_MASTER_KEY:
   PI_DEFAULT_CREDENTIALS:
   PI_SESSION_RECORDING:
   RAKAZO_LIVE_MODEL_CATALOG:
@@ -694,6 +696,73 @@ services:
       web:
         condition: service_started
 
+  # Optional proxy and its own database. A plain `up` does not start them;
+  # pass `--profile litellm`. The API reads HIVE_LITELLM_BASE_URL (http://litellm:4000).
+  litellm-db:
+    profiles: [litellm]
+    image: ${POSTGRES_IMAGE:-postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6}
+    restart: unless-stopped
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 512m
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD:-}
+      POSTGRES_DB: litellm
+    volumes:
+      - litellmdb:/var/lib/postgresql
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  litellm:
+    profiles: [litellm]
+    image: ghcr.io/berriai/litellm:main-stable@sha256:1050d2c9ca58399de9cd51df6eb503812af697717f54d2f08c1c30589c75e1f7
+    restart: unless-stopped
+    init: true
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 1g
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      LITELLM_MASTER_KEY: ${HIVE_LITELLM_MASTER_KEY:-}
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:-}@litellm-db:5432/litellm
+      HIVE_DEFAULT_MODEL: ${HIVE_DEFAULT_MODEL:-}
+      LITELLM_MODEL: ${LITELLM_MODEL:-}
+      LITELLM_API_BASE: ${LITELLM_API_BASE:-http://host.docker.internal:11434}
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./litellm.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    networks:
+      - app
+      - data
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python3
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5)"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
 volumes:
   postgres:
   pgdata:
@@ -702,6 +771,7 @@ volumes:
   caddyconfig:
   webassets:
   pitrspool:
+  litellmdb:
 
 networks:
   edge:

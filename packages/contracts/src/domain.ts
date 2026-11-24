@@ -383,6 +383,12 @@ export const CreateBotInput = z.object({
   computerMode: ComputerModeSchema.default("team"),
   /** Idempotency key within a space (unique with spaceId). */
   spawnKey: z.string().trim().min(1).max(120).optional(),
+  /** LiteLLM model id. Ignored unless the installation has a LiteLLM proxy. */
+  model: z.string().trim().min(1).max(200).optional(),
+  /** Monthly budget in dollars. Omitted means no budget. */
+  monthlyBudget: z.number().positive().max(1_000_000).optional(),
+  /** An existing LiteLLM key, instead of generating one. */
+  modelKey: z.string().trim().min(1).max(500).optional(),
 });
 export type CreateBotInput = z.infer<typeof CreateBotInput>;
 

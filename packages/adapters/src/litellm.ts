@@ -1,0 +1,130 @@
+/** LiteLLM admin client. The master key stays on the server. */
+
+export type LiteLLMConfig = { baseUrl: string; masterKey: string };
+
+export type LiteLLMKey = { key: string; keyAlias: string };
+
+export type LiteLLMSpendRow = { botId: string; spendUsd: number };
+
+export function hiveLiteLLM(env: NodeJS.ProcessEnv = process.env): LiteLLMConfig | null {
+  const baseUrl = env.HIVE_LITELLM_BASE_URL?.trim().replace(/\/$/, "");
+  const masterKey = env.HIVE_LITELLM_MASTER_KEY?.trim();
+  if (!baseUrl || !masterKey) return null;
+  return { baseUrl, masterKey };
+}
+
+/** OpenAI-compatible base for a bot key. The admin URL is the proxy root. */
+export function liteLLMModelBaseUrl(config: LiteLLMConfig): string {
+  return config.baseUrl.endsWith("/v1") ? config.baseUrl : `${config.baseUrl}/v1`;
+}
+
+type FetchLike = typeof fetch;
+
+export function createLiteLLM(config: LiteLLMConfig, fetchImpl: FetchLike = fetch) {
+  async function call(path: string, init: RequestInit = {}): Promise<unknown> {
+    const response = await fetchImpl(`${config.baseUrl}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${config.masterKey}`,
+        "content-type": "application/json",
+        ...init.headers,
+      },
+    });
+    if (!response.ok) throw new Error(`LiteLLM ${path} failed (${response.status})`);
+    if (response.status === 204) return null;
+    return response.json() as Promise<unknown>;
+  }
+
+  return {
+    async models(): Promise<string[]> {
+      const body = (await call("/model/info")) as { data?: Array<{ model_name?: string }> };
+      const names = (body.data ?? [])
+        .map((row) => row.model_name?.trim() ?? "")
+        .filter((name) => name.length > 0);
+      return [...new Set(names)];
+    },
+
+    async generate(input: {
+      model: string;
+      budgetUsd: number | null;
+      botId: string;
+      orgId: string;
+    }): Promise<LiteLLMKey> {
+      const body = (await call("/key/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          models: [input.model],
+          max_budget: input.budgetUsd,
+          budget_duration: input.budgetUsd == null ? null : "30d",
+          metadata: { bot_id: input.botId, org_id: input.orgId },
+          key_alias: `hive-${input.botId}`,
+        }),
+      })) as { key?: string; token?: string; token_id?: string; key_alias?: string };
+      const key = body.key?.trim();
+      if (!key) throw new Error("LiteLLM /key/generate failed (no key)");
+      return { key, keyAlias: body.key_alias?.trim() || body.token_id || `hive-${input.botId}` };
+    },
+
+    async update(input: { key: string; model: string; budgetUsd: number | null }): Promise<void> {
+      await call("/key/update", {
+        method: "POST",
+        body: JSON.stringify({
+          key: input.key,
+          models: [input.model],
+          max_budget: input.budgetUsd,
+          budget_duration: input.budgetUsd == null ? null : "30d",
+        }),
+      });
+    },
+
+    async block(key: string): Promise<void> {
+      await call("/key/block", { method: "POST", body: JSON.stringify({ key }) });
+    },
+
+    async unblock(key: string): Promise<void> {
+      await call("/key/unblock", { method: "POST", body: JSON.stringify({ key }) });
+    },
+
+    async remove(key: string): Promise<void> {
+      await call("/key/delete", { method: "POST", body: JSON.stringify({ keys: [key] }) });
+    },
+
+    async keyInfo(key: string): Promise<{ spendUsd: number; maxBudgetUsd: number | null }> {
+      const body = (await call(`/key/info?key=${encodeURIComponent(key)}`)) as {
+        info?: { spend?: number; max_budget?: number | null };
+      };
+      return {
+        spendUsd: Number(body.info?.spend ?? 0),
+        maxBudgetUsd: body.info?.max_budget == null ? null : Number(body.info.max_budget),
+      };
+    },
+
+    async spendLogs(startDate: string, endDate: string): Promise<LiteLLMSpendRow[]> {
+      const body = (await call(
+        `/spend/logs?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`,
+      )) as
+        | Array<{ spend?: number; metadata?: { bot_id?: string } }>
+        | { data?: Array<{ spend?: number; metadata?: { bot_id?: string } }> };
+      const rows = Array.isArray(body) ? body : (body.data ?? []);
+      const totals = new Map<string, number>();
+      for (const row of rows) {
+        const botId = row.metadata?.bot_id?.trim();
+        if (!botId) continue;
+        totals.set(botId, (totals.get(botId) ?? 0) + Number(row.spend ?? 0));
+      }
+      return [...totals].map(([botId, spendUsd]) => ({ botId, spendUsd }));
+    },
+  };
+}
+
+export function rollupDepartmentSpend(
+  bots: Array<{ departments: string[]; spendUsd: number }>,
+): Array<{ name: string; spendUsd: number }> {
+  const totals = new Map<string, number>();
+  for (const bot of bots) {
+    for (const name of bot.departments) {
+      totals.set(name, (totals.get(name) ?? 0) + bot.spendUsd);
+    }
+  }
+  return [...totals].map(([name, spendUsd]) => ({ name, spendUsd }));
+}
