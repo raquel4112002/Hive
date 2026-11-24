@@ -62,6 +62,8 @@ x-app-environment: &app-environment
   INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
   INFISICAL_ENVIRONMENT: ${INFISICAL_ENVIRONMENT:-}
   INFISICAL_FOLDER: ${INFISICAL_FOLDER:-}
+  OPENBAO_ADDR: ${OPENBAO_ADDR:-}
+  OPENBAO_TOKEN: ${OPENBAO_TOKEN:-}
   # Logs, errors, traces and analytics
   LOG_LEVEL:
   SECURITY_EVENT_RETENTION_DAYS:
@@ -496,7 +498,7 @@ services:
         - CMD
         - node
         - -e
-        - fetch('http://127.0.0.1:3100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+        - fetch('http://127.0.0.1:3100/ready').then(async r=>{const b=await r.json().catch(()=>({}));if(b.vault){console.log(b.vault);return}if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
       interval: 10s
       timeout: 5s
       retries: 20
@@ -765,8 +767,30 @@ services:
       retries: 20
       start_period: 40s
 
+  # Optional credential vault. A plain `up` does not start it; pass `--profile vault`.
+  openbao:
+    profiles: [vault]
+    image: openbao/openbao:2.2.2@sha256:d5d098f98f5ca7cae2e33d1e6dd9e2bea332275ad6bb7ff09032b48af3e1141e
+    user: "0:0"
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      ["chown -R openbao:openbao /openbao/data && exec su-exec openbao bao server -config=/openbao/config/openbao.hcl"]
+    environment:
+      BAO_ADDR: http://127.0.0.1:8200
+    volumes:
+      - openbao:/openbao/data
+      - ./openbao.hcl:/openbao/config/openbao.hcl:ro
+    ports:
+      - "127.0.0.1:8200:8200"
+    networks:
+      - app
+
 volumes:
   postgres:
+  openbao:
   pgdata:
   appdata:
   caddydata:

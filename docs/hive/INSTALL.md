@@ -67,4 +67,63 @@ docker compose --env-file .env -f infra/compose/docker-compose.prod.yml --profil
 
 Another model is another entry in `infra/compose/litellm.yaml`. The shipped file sets `input_cost_per_token` and `output_cost_per_token` to 0. Ollama has no price of its own, so dollars stay at 0.00 and a monthly budget does not run out. Costs still shows the token count beside the dollars. A trial priced each output token at 0.02 so a budget could run out; that temporary price is what the Costs screen added up as 22.53 and 5.81. Those numbers are not the product default. Set the two prices above zero only when a monthly budget should be able to run out.
 
-More detail on secrets, models, and production TLS is in [docs/self-host.md](../self-host.md) and [docs/self-host-secrets.md](../self-host-secrets.md).
+## OpenBao
+
+Bot credentials can stay in the encrypted store (`SECRET_STORE=encrypted`) or move to OpenBao (`SECRET_STORE=openbao`). A plain `up` does not start the vault. Start it with the `vault` profile, on the dev file or the production file:
+
+```bash
+docker compose --env-file .env -f infra/compose/docker-compose.yml --profile vault up -d openbao
+```
+
+The process starts sealed. Initialize it once. That prints the unseal keys and the root token. Keep them outside the repository and outside `.env`.
+
+```bash
+docker compose --env-file .env -f infra/compose/docker-compose.yml exec openbao bao operator init
+```
+
+Set `OPENBAO_ADDR=http://openbao:8200`, `OPENBAO_TOKEN` to the root token, and `SECRET_STORE=openbao`, then recreate the API and the worker. The first start creates the kv version 2 mount at `secret/` when that path is empty. After the mount exists, create a management token that can write secrets and policies and cannot read `secret/data/org/`. Put that token in `OPENBAO_TOKEN`, leave the root token offline, and recreate the API and the worker again. Each bot receives its own policy for `org/<orgId>/bot/<botId>/`. Archiving the bot deletes that policy.
+
+### Unseal by hand
+
+This install uses a manual unseal. A restart seals the process again. The data is still on the volume. Until it is unsealed, `/ready` and the API health check report `cofre selado`, the admin portal shows the same words, and a run that needs a credential fails with that message instead of staying at work.
+
+`unseal` asks for a key. Repeat it until the status says unsealed. Then the next run can read credentials again.
+
+```bash
+docker compose --env-file .env -f infra/compose/docker-compose.yml exec openbao bao operator unseal
+```
+
+### Unseal by itself in production
+
+OpenBao can unseal on startup with a transit seal or a cloud KMS (AWS KMS, GCP KMS, or Azure Key Vault). This install does not turn that on. A production host that should come back without an operator adds a `seal` stanza to `infra/compose/openbao.hcl` and keeps the recovery keys offline. A transit seal looks like this, with the address and token of a separate OpenBao that only holds the unseal key:
+
+```hcl
+seal "transit" {
+  address    = "https://unseal.example"
+  token      = "replace-with-the-transit-token"
+  key_name   = "hive-unseal"
+  mount_path = "transit/"
+}
+```
+
+A cloud KMS uses its own stanza, for example `seal "awskms"` with `region` and `kms_key_id`. After that stanza is in place, a restart unseals itself. Keep the original unseal keys as well: losing both the KMS key and those keys loses the credentials.
+
+### Backup and restore
+
+Stop OpenBao, copy the `openbao` volume, and store the unseal keys with that copy. Restoring the volume without the keys does not reveal the credentials.
+
+```bash
+docker compose --env-file .env -f infra/compose/docker-compose.yml stop openbao
+docker run --rm -v <project>_openbao:/from -v <project>_openbao_backup:/to alpine tar -C /from -cf /to/openbao.tar .
+```
+
+`<project>` is the Compose project name. On a clean server, create an empty volume, unpack the archive into it, start OpenBao with that volume and the same `openbao.hcl`, and unseal with the saved keys. The paths come back only after unseal.
+
+```bash
+docker volume create <project>_openbao_restore
+docker run --rm -v <project>_openbao_backup:/from -v <project>_openbao_restore:/to alpine tar -C /to -xf /from/openbao.tar
+```
+
+Point the OpenBao service at `<project>_openbao_restore` instead of `openbao`, start it, and run `bao operator unseal` until it is unsealed. A restore onto a new volume, unsealed with the saved keys, returned the credential that had been stored before the copy. Do not put the keys, the root token, or a credential value in git, in a log, or in a backup note.
+
+More detail on secrets, models, and production TLS is in [docs/self-host.md](../self-host.md) and [docs/self-host-secrets.md](../self-host-secrets.md). The credential rules are in [PHASE4.md](PHASE4.md).

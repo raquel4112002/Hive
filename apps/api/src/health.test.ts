@@ -70,6 +70,24 @@ describe("health routes", () => {
     }
   });
 
+  it("reports a sealed vault without dropping liveness", async () => {
+    const health = healthRoutes(
+      () => ({}),
+      async () => undefined,
+      async () => "cofre selado",
+    );
+    const ready = await health.request("/ready");
+    expect(ready.status).toBe(503);
+    await expect(ready.json()).resolves.toEqual({
+      ok: false,
+      degraded: true,
+      vault: "cofre selado",
+    });
+    expect((await health.request("/health")).status).toBe(200);
+    const internal = await health.request("/internal/health");
+    await expect(internal.json()).resolves.toMatchObject({ vault: "cofre selado" });
+  });
+
   it("keeps public liveness free of deployment details", async () => {
     const response = await app.request("/health");
     expect(response.status).toBe(200);

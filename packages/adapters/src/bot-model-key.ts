@@ -22,17 +22,22 @@ function cents(usd: number | null | undefined): number | null {
   return Math.round(usd * 100);
 }
 
-async function seal(secretStore: SecretStore, botId: string, apiKey: string): Promise<string> {
+async function seal(
+  secretStore: SecretStore,
+  botId: string,
+  orgId: string,
+  apiKey: string,
+): Promise<string> {
   const stored = await secretStore.put(
     apiKey,
     {
       operationId: botId,
       traceId: botId,
       userId: "hive-bot-key",
-      spaceId: "hive-bot-key",
+      spaceId: orgId,
       signal: new AbortController().signal,
     },
-    { recordId: `bot-model-${botId}` },
+    { recordId: `org/${orgId}/bot/${botId}/litellm` },
   );
   return stored.ciphertext;
 }
@@ -120,7 +125,7 @@ export async function issueBotModelKey(
     keyAlias = issued.keyAlias;
   }
   try {
-    const ciphertext = await seal(deps.secretStore, input.botId, apiKey);
+    const ciphertext = await seal(deps.secretStore, input.botId, input.orgId, apiKey);
     await saveBotModelKey(deps.prisma, {
       botId: input.botId,
       spaceId: input.spaceId,

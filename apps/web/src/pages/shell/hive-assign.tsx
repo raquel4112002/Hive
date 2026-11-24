@@ -30,6 +30,12 @@ export function HiveAssign({
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "USER">("USER");
   const [inviteDepartments, setInviteDepartments] = useState<string[]>([]);
   const [inviteLink, setInviteLink] = useState("");
+  const [credentialKind, setCredentialKind] = useState<"email" | "login" | "api_key">("email");
+  const [credentialLabel, setCredentialLabel] = useState("");
+  const [credentialValue, setCredentialValue] = useState("");
+  const [credentials, setCredentials] = useState<
+    { id: string; kind: string; label: string; updatedAt: string }[]
+  >([]);
 
   useEffect(() => {
     let live = true;
@@ -42,6 +48,12 @@ export function HiveAssign({
       })
       .catch(() => undefined);
     rpc.hive
+      .credentials({ botId })
+      .then((rows) => {
+        if (live) setCredentials(rows);
+      })
+      .catch(() => undefined);
+    rpc.hive
       .departments()
       .then((rows) => {
         if (live) setDepartments(rows);
@@ -50,7 +62,7 @@ export function HiveAssign({
     return () => {
       live = false;
     };
-  }, [rpc]);
+  }, [botId, rpc]);
 
   async function run(task: () => Promise<unknown>) {
     setBusy(true);
@@ -191,6 +203,84 @@ export function HiveAssign({
           ))}
         </div>
       ) : null}
+      <select
+        aria-label="Kind"
+        className="h-8 rounded-md border border-border bg-background px-2 text-sm"
+        value={credentialKind}
+        disabled={busy}
+        onChange={(event) =>
+          setCredentialKind(
+            event.target.value === "login" || event.target.value === "api_key"
+              ? event.target.value
+              : "email",
+          )
+        }
+      >
+        <option value="email">Email</option>
+        <option value="login">Login</option>
+        <option value="api_key">API key</option>
+      </select>
+      <Input
+        aria-label="Label"
+        placeholder="Label"
+        className="h-8 w-32"
+        value={credentialLabel}
+        disabled={busy}
+        onChange={(event) => setCredentialLabel(event.target.value)}
+      />
+      <Input
+        aria-label="Value"
+        placeholder="Value"
+        type="password"
+        className="h-8 w-40"
+        value={credentialValue}
+        disabled={busy}
+        onChange={(event) => setCredentialValue(event.target.value)}
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={busy || !credentialLabel.trim() || !credentialValue}
+        onClick={() => {
+          void run(async () => {
+            const saved = await rpc.hive.saveCredential({
+              botId,
+              kind: credentialKind,
+              label: credentialLabel.trim(),
+              value: credentialValue,
+            });
+            setCredentialValue("");
+            setCredentials((current) => [
+              ...current.filter((row) => row.label !== saved.label),
+              saved,
+            ]);
+          });
+        }}
+      >
+        Save
+      </Button>
+      {credentials.map((row) => (
+        <span key={row.id} className="flex items-center gap-2 text-sm">
+          <span>
+            {row.label} Set {row.updatedAt.slice(0, 10)}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              void run(async () => {
+                await rpc.hive.removeCredential({ botId, label: row.label });
+                setCredentials((current) => current.filter((item) => item.id !== row.id));
+              });
+            }}
+          >
+            Remove
+          </Button>
+        </span>
+      ))}
       <Input
         aria-label="Email"
         placeholder="Email"

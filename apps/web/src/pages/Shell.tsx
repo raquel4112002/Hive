@@ -89,6 +89,7 @@ import { BotsSidebarLayout } from "./shell/sidebar-layout";
 import { SidebarRoster } from "./shell/sidebar-roster";
 import { commitSpaceRename, countUnreadChats, sidebarGroupsForSpaces } from "./shell/space-sidebar";
 import { Transcript } from "./shell/transcript";
+import { VaultSealNotice } from "./shell/vault-seal-notice";
 import { useBrowserNotifications } from "./shell/use-browser-notifications";
 import { useChatRead } from "./shell/use-chat-read";
 import { useComposerActions } from "./shell/use-composer-actions";
@@ -936,6 +937,9 @@ function SpaceShell() {
           />
         ) : null}
         <CallReturnBar />
+        {bootstrapMe?.hiveRole === "ADMIN" || bootstrapMe?.hiveRole === "SUPER_ADMIN" ? (
+          <VaultSealNotice rpc={rpc} />
+        ) : null}
         {/* The header floats so the transcript scrolls under its buttons. */}
         <div className="relative flex min-h-0 flex-1 flex-col">
           {/* Only the pills take input; the gaps pass clicks and scrolling to the transcript. */}

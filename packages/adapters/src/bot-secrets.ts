@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { SecretStore } from "@rakazo/adapter-kit";
+import { loadHiveCredentialValues } from "./hive-bot-vault.js";
 import type {
   BotSecretDestination,
   LoginField,
@@ -206,6 +207,7 @@ export async function shellCommandEnvironment(input: {
   prisma: PrismaClient;
   secretStore: Pick<SecretStore, "load">;
   scope: BotSecretScope;
+  botId?: string;
   registerRedactions: (values: string[]) => void;
 }): Promise<{ env: Record<string, string>; unsetEnv: string[] }> {
   const unsetVariables = new Set<string>();
@@ -218,6 +220,11 @@ export async function shellCommandEnvironment(input: {
   // Encoded forms too, as secret_request does, so an accidental `base64` or URL-encoding of a
   // value is still redacted from command output.
   input.registerRedactions(commandCredentialRedactions(botEnvironment));
+  if (input.botId) {
+    const hive = await loadHiveCredentialValues(input.prisma, input.secretStore, input.botId);
+    Object.assign(botEnvironment, hive.env);
+    input.registerRedactions(hive.values);
+  }
   return { env: botEnvironment, unsetEnv: [...unsetVariables] };
 }
 

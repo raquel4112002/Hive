@@ -16,9 +16,13 @@ import {
   modelFallbackFailure,
   normalizeRunError,
   userRunError,
+  VAULT_SEALED_MESSAGE,
 } from "./run-error.js";
 
 describe("normalizeRunError", () => {
+  it("shows a sealed vault as that message", () => {
+    expect(normalizeRunError(VAULT_SEALED_MESSAGE).summary).toBe(VAULT_SEALED_MESSAGE);
+  });
   beforeEach(() => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-01T00:00:00Z"));
   });

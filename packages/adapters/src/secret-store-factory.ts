@@ -9,7 +9,8 @@ import type {
 } from "@rakazo/adapter-kit";
 import { getLogger } from "@rakazo/logging";
 import type { InfisicalSecretStoreOptions } from "./infisical-secret-store.js";
-import { INFISICAL_REF_PREFIX, InfisicalSecretStore } from "./infisical-secret-store.js";
+import { InfisicalSecretStore } from "./infisical-secret-store.js";
+import { OpenBaoSecretStore, openBaoOptionsFromEnv } from "./openbao-secret-store.js";
 import { SecretChanges } from "./secret-changes.js";
 import { EncryptedSecretStore } from "./secrets.js";
 
@@ -18,6 +19,10 @@ export function secretStoreOptionsFromEnv(
 ): InfisicalSecretStoreOptions | undefined {
   const provider = source.SECRET_STORE?.trim() || "encrypted";
   if (provider === "encrypted") return undefined;
+  if (provider === "openbao") {
+    openBaoOptionsFromEnv(source);
+    return undefined;
+  }
   if (provider !== "infisical") throw new Error("Unsupported SECRET_STORE");
   const required = (name: string) => {
     const value = source[name]?.trim();
@@ -71,6 +76,12 @@ export async function holdSecretNotifications<T>(work: () => Promise<T>): Promis
   }
 }
 
+type RemoteSecretStore = SecretStore & {
+  readonly refPrefix: string;
+  invalidate?(ref: string): void;
+  revokeBot?(botId: string): Promise<void>;
+};
+
 /** Routing is private to the store; consumers only see opaque refs. */
 export class ComposedSecretStore extends SecretChanges implements SecretStore {
   private readonly origin = randomUUID();
@@ -80,7 +91,7 @@ export class ComposedSecretStore extends SecretChanges implements SecretStore {
   private readonly subscriptions: Array<() => void> = [];
   constructor(
     private readonly encrypted: SecretStore,
-    private readonly remote?: InfisicalSecretStore,
+    private readonly remote?: RemoteSecretStore,
     private readonly realtime?: RealtimeFanout,
   ) {
     super();
@@ -103,8 +114,8 @@ export class ComposedSecretStore extends SecretChanges implements SecretStore {
         try {
           const event = JSON.parse(payload);
           if (event.origin !== this.origin && typeof event.ref === "string") {
-            if (this.remote && event.ref.startsWith(INFISICAL_REF_PREFIX))
-              this.remote.invalidate(event.ref);
+            if (this.remote && event.ref.startsWith(this.remote.refPrefix))
+              this.remote.invalidate?.(event.ref);
             else this.changed(event.ref);
           }
         } catch {
@@ -133,17 +144,18 @@ export class ComposedSecretStore extends SecretChanges implements SecretStore {
     else await this.publish(record.ref);
     return record;
   }
+  private remoteOwns(ref: string): boolean {
+    return Boolean(this.remote && ref.startsWith(this.remote.refPrefix));
+  }
   load(ref: string, context: SecretContext): Promise<string> {
-    return (
-      ref.startsWith(INFISICAL_REF_PREFIX) && this.remote ? this.remote : this.encrypted
-    ).load(ref, context);
+    return (this.remoteOwns(ref) ? this.remote! : this.encrypted).load(ref, context);
+  }
+  async revokeBot(botId: string): Promise<void> {
+    await this.remote?.revokeBot?.(botId);
   }
   async delete(ref: string, context: SecretContext): Promise<void> {
     try {
-      await (ref.startsWith(INFISICAL_REF_PREFIX) && this.remote
-        ? this.remote
-        : this.encrypted
-      ).delete(ref, context);
+      await (this.remoteOwns(ref) ? this.remote! : this.encrypted).delete(ref, context);
     } finally {
       await this.publish(ref);
     }
@@ -173,8 +185,16 @@ export function createSecretStore(
   source: NodeJS.ProcessEnv = process.env,
   realtime?: RealtimeFanout,
 ): SecretStore {
-  const options = secretStoreOptionsFromEnv(source);
   const encrypted = new EncryptedSecretStore(encryptionKey);
+  const provider = source.SECRET_STORE?.trim() || "encrypted";
+  if (provider === "openbao") {
+    return new ComposedSecretStore(
+      encrypted,
+      new OpenBaoSecretStore(openBaoOptionsFromEnv(source)),
+      realtime,
+    );
+  }
+  const options = secretStoreOptionsFromEnv(source);
   return options || realtime
     ? new ComposedSecretStore(
         encrypted,

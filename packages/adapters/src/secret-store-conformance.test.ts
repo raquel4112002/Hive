@@ -595,5 +595,15 @@ describe("Infisical lifecycle and REST", () => {
     expect(() => secretStoreOptionsFromEnv({ SECRET_STORE: "invalid" })).toThrow(
       "Unsupported SECRET_STORE",
     );
+    expect(
+      secretStoreOptionsFromEnv({
+        SECRET_STORE: "openbao",
+        OPENBAO_ADDR: "http://openbao:8200",
+        OPENBAO_TOKEN: "fake",
+      }),
+    ).toBeUndefined();
+    expect(() => secretStoreOptionsFromEnv({ SECRET_STORE: "openbao" })).toThrow(
+      "Missing OPENBAO_ADDR",
+    );
   });
 });

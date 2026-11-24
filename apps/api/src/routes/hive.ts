@@ -2,7 +2,7 @@
 // Derived from Rakazo (Apache License 2.0).
 
 import { ORPCError } from "@orpc/server";
-import { createLiteLLM, hiveLiteLLM, issueBotModelKey, listBotSpend } from "@rakazo/adapters";
+import { createLiteLLM, hiveLiteLLM, issueBotModelKey, listBotSpend, vaultHealth, writeHiveCredential } from "@rakazo/adapters";
 import {
   assignBotDepartment,
   createHiveInvite,
@@ -10,8 +10,10 @@ import {
   inspectConversation,
   linkBotConnection,
   listBotPosts,
+  listHiveCredentials,
   readBotPostArtifact,
   readHiveRole,
+  removeHiveCredential,
   IsolationError,
   runAsSystem,
   setBotPublication,
@@ -115,6 +117,51 @@ export function hiveRoutes(ctx: RouterContext) {
           }
           throw error;
         }
+        return { ok: true as const };
+      }),
+      vaultStatus: authed.hive.vaultStatus.handler(async ({ context }) => {
+        await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        return { sealed: (await vaultHealth()) !== null };
+      }),
+      credentials: authed.hive.credentials.handler(async ({ context, input }) => {
+        await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const bot = await deps.prisma.bot.findFirst({
+          where: { id: input.botId, spaceId: context.actor.spaceId },
+          select: { id: true },
+        });
+        if (!bot) throw new IsolationError();
+        return listHiveCredentials(deps.prisma, input.botId);
+      }),
+      saveCredential: authed.hive.saveCredential.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const bot = await deps.prisma.bot.findFirst({
+          where: { id: input.botId, spaceId: context.actor.spaceId },
+          select: { id: true },
+        });
+        if (!bot) throw new IsolationError();
+        return writeHiveCredential(deps.prisma, deps.secrets, {
+          organizationId: hive.organizationId,
+          botId: input.botId,
+          kind: input.kind,
+          label: input.label,
+          value: input.value,
+          actorUserId: context.actor.userId,
+        });
+      }),
+      removeCredential: authed.hive.removeCredential.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const bot = await deps.prisma.bot.findFirst({
+          where: { id: input.botId, spaceId: context.actor.spaceId },
+          select: { id: true },
+        });
+        if (!bot) throw new IsolationError();
+        const secretRef = await removeHiveCredential(deps.prisma, {
+          botId: input.botId,
+          label: input.label,
+          actorUserId: context.actor.userId,
+          organizationId: hive.organizationId,
+        });
+        if (secretRef) await deps.secrets.delete(secretRef, `bot:${input.botId}`).catch(() => undefined);
         return { ok: true as const };
       }),
       spend: authed.hive.spend.handler(async ({ context, input }) => {

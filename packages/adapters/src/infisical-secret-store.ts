@@ -36,6 +36,7 @@ const MAX_RETRY_AFTER_MS = 5_000;
 
 /** Targeted REST reads only: no plaintext folder snapshot. */
 export class InfisicalSecretStore extends SecretChanges implements SecretStore {
+  readonly refPrefix = INFISICAL_REF_PREFIX;
   private token?: { value: string; expires: number };
   private login?: Promise<string>;
   private readonly cache = new Map<string, CacheEntry>();

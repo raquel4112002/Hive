@@ -1,4 +1,5 @@
 import { MEMORY_REVISION_CONFLICT_ERROR } from "@rakazo/adapter-kit";
+import { redactSecrets } from "@rakazo/core";
 import { HistoryReadInputSchema, HistorySearchInputSchema } from "@rakazo/contracts";
 import { readHistory, searchHistory } from "@rakazo/db";
 import { sharedMemorySaveError } from "./builtin-tools.js";
@@ -69,7 +70,10 @@ export const memoryTools: ToolHandlers = {
     for (let attempt = 1; ; attempt += 1) {
       const snapshot = await deps.memory.read({ scope: "bot", botId: bot.id, path }, context);
       const existing = snapshot.documents[0];
-      const content = appendMemoryFact(existing?.content ?? "", String(args.content ?? ""));
+      const content = redactSecrets(
+        appendMemoryFact(existing?.content ?? "", String(args.content ?? "")),
+        ctx.secrets,
+      );
       if (content === (existing?.content ?? "")) return call.finish({ ok: true });
       try {
         await deps.memory.commit(
@@ -106,7 +110,7 @@ export const memoryTools: ToolHandlers = {
         {
           scope: "user",
           path,
-          content: String(args.content ?? ""),
+          content: redactSecrets(String(args.content ?? ""), ctx.secrets),
           expectedRevision,
           sourceRunId: runId,
           sourceThreadId: thread.id,
@@ -144,7 +148,7 @@ export const memoryTools: ToolHandlers = {
     return call.finish(
       await ctx.memory.semantic!.save(
         {
-          content: String(args.content ?? ""),
+          content: redactSecrets(String(args.content ?? ""), ctx.secrets),
           scope: ctx.memory.scope!,
           botId: bot.id,
           source: { kind: "durable" },

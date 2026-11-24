@@ -59,6 +59,7 @@ import {
   loadLoginPasswordRedactions,
   loadRunLoginRedactions,
 } from "./bot-secrets.js";
+import { loadHiveCredentialValues, sealedVaultRunError } from "./hive-bot-vault.js";
 import { createBrowserProvider } from "./browser-provider-factory.js";
 import { partitionTools } from "./builtin-tool-bridge.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
@@ -297,6 +298,24 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         data: { status: "running" },
       });
       if (started.count !== 1) return;
+      const sealed = await sealedVaultRunError(deps.prisma, run.botId).catch(() => null);
+      if (sealed) {
+        const named = await deps.prisma.bot.findUnique({
+          where: { id: run.botId },
+          select: { name: true },
+        });
+        const sealedAttempt = await deps.prisma.attempt.create({
+          data: { runId, fence, status: "running" },
+        });
+        await failRunBeforeTurn(
+          deps,
+          run,
+          named?.name ?? "Bot",
+          { attemptId: sealedAttempt.id, workerId, fence },
+          sealed,
+        );
+        return;
+      }
       const leaseTarget = await deps.prisma.bot.findUniqueOrThrow({
         where: { id: run.botId },
         select: {
@@ -558,6 +577,14 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           ...purchaseRedactions,
           ...runLoginRedactions,
         );
+        const hiveCredentials = await loadHiveCredentialValues(
+          deps.prisma,
+          deps.secretStore,
+          run.botId,
+          { record: true },
+        );
+        runSecrets.push(...hiveCredentials.values);
+        Object.assign(initialBotCommandEnvironment, hiveCredentials.env);
         const agentEnvironmentInstruction = formatAgentEnvironmentInstruction(
           initialBotCommandEnvironment,
         );

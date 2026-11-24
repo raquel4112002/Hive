@@ -208,6 +208,9 @@ const MALFORMED_KEY_HEADER =
 const MODEL_UNAVAILABLE =
   /^(?:unsupported|unknown|unrecognized)[ _-]model\b(?![ :]+(?:parameters?|fields?|options?|settings?)\b)|\bmodel\b(?:(?!\.\s)[\s\S]){0,80}?\b(?:not found|does not exist|unavailable|not available|not supported|isn['\u2019]t supported|(?:is|has been) deprecated|does(?: not|n['\u2019]t) support)\b|\bnot supported (?:with|by|for) (?:this|the) model\b|^feature 'tool calls' is not (?:currently )?supported\b/i;
 
+/** OpenBao is sealed and this run needed a credential stored there. */
+export const VAULT_SEALED_MESSAGE = "cofre selado";
+
 /**
  * Keep provider diagnostics available without exposing them in the visible summary. `recovery`
  * is the one action that fixes the failure: "connection" opens the model connections (a
@@ -229,6 +232,7 @@ export function normalizeRunError(
   period?: "none" | "daily" | "weekly" | "monthly";
 } {
   const trimmed = details.trim();
+  if (trimmed === VAULT_SEALED_MESSAGE) return { summary: trimmed, details };
   if ([MODEL_IMAGE_INPUT_ERROR, MODEL_IMAGE_INPUT_UNKNOWN].includes(trimmed)) {
     return {
       summary: translate(trimmed),

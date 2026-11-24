@@ -2407,3 +2407,35 @@ model HiveInvite {
   @@index([organizationId])
   @@map("hive_invites")
 }
+
+/// Hive modification: metadata for a bot credential. The value stays in the secret store.
+model HiveBotCredential {
+  id              String   @id @default(cuid())
+  organizationId  String
+  botId           String
+  kind            String
+  label           String
+  secretRef       String
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([botId, label])
+  @@index([organizationId])
+  @@map("hive_bot_credentials")
+}
+
+/// Hive modification: who changed a bot credential, and when a bot used it. Never the value.
+model HiveCredentialEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  botId          String
+  credentialId   String?
+  action         String
+  actorUserId    String?
+  createdAt      DateTime @default(now())
+
+  @@index([botId, createdAt])
+  @@map("hive_credential_events")
+}

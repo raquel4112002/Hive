@@ -1394,6 +1394,39 @@ export const appContract = {
         }),
       )
       .output(z.object({ link: z.string(), expiresAt: z.string() })),
+    vaultStatus: oc.output(z.object({ sealed: z.boolean() })),
+    credentials: oc.input(z.object({ botId: Id })).output(
+      z.array(
+        z.object({
+          id: Id,
+          kind: z.enum(["email", "login", "api_key"]),
+          label: z.string(),
+          set: z.literal(true),
+          updatedAt: z.string(),
+        }),
+      ),
+    ),
+    saveCredential: oc
+      .input(
+        z.object({
+          botId: Id,
+          kind: z.enum(["email", "login", "api_key"]),
+          label: z.string().trim().min(1).max(80),
+          value: z.string().min(1).max(4000),
+        }),
+      )
+      .output(
+        z.object({
+          id: Id,
+          kind: z.enum(["email", "login", "api_key"]),
+          label: z.string(),
+          set: z.literal(true),
+          updatedAt: z.string(),
+        }),
+      ),
+    removeCredential: oc
+      .input(z.object({ botId: Id, label: z.string().trim().min(1).max(80) }))
+      .output(z.object({ ok: z.literal(true) })),
   },
   posts: {
     list: oc.input(z.object({ botId: Id })).output(

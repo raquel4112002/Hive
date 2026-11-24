@@ -37,6 +37,8 @@ import {
   CodexCatalogCache,
   ComposioConnector,
   contentKeyProviderFromEnv,
+  migrateHiveVault,
+  vaultHealth,
   createAgentHomeStore,
   createArtifactStore,
   createAuditLogReconciler,
@@ -313,6 +315,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       : new InMemoryRealtimeFanout());
   const secrets = createSecretStore(env.encryptionKey, process.env, realtime);
   await secrets.start();
+  await migrateHiveVault(prisma, secrets).catch(() => {
+    logger.warn("Bot credential migration left the previous copies in place");
+  });
   if (secrets.describe().capabilities.degraded)
     logger.warn("Secret storage degraded; encrypted credentials remain available");
   prisma = withSecretPersistence(prisma, secrets);
@@ -1386,6 +1391,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           prisma.$executeRaw`SET LOCAL statement_timeout = 1500`,
           prisma.$queryRaw`SELECT 1`,
         ]),
+      () => vaultHealth(),
     ),
   );
 

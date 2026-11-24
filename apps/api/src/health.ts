@@ -9,6 +9,7 @@ import { Hono } from "hono";
 export function healthRoutes(
   details: () => Record<string, unknown>,
   database?: () => Promise<unknown>,
+  vault?: () => Promise<string | null>,
 ) {
   const app = new Hono();
   // One probe at a time: polls during a hung check wait on it instead of taking more connections.
@@ -26,18 +27,30 @@ export function healthRoutes(
     return inFlight;
   };
   app.get("/ready", async (c) => {
-    const degraded = details().degraded === true;
+    const sealed = vault ? await vault().catch(() => null) : null;
+    const degraded = details().degraded === true || sealed != null;
     const databaseUp = database ? await withinDeadline(probe(database)) : true;
     const ok = !degraded && databaseUp;
     return c.json(
-      { ok, degraded, ...(databaseUp ? {} : { database: "unreachable" }) },
+      {
+        ok,
+        degraded,
+        ...(databaseUp ? {} : { database: "unreachable" }),
+        ...(sealed ? { vault: sealed } : {}),
+      },
       ok ? 200 : 503,
     );
   });
   app.get("/health", (c) => c.json({ ok: true }));
-  app.get("/internal/health", (c) => {
+  app.get("/internal/health", async (c) => {
     if (c.req.header("x-forwarded-for") || c.req.header("forwarded")) return c.notFound();
-    return c.json({ ok: true, ...details(), telemetry: logSinkHealth() });
+    const sealed = vault ? await vault().catch(() => null) : null;
+    return c.json({
+      ok: true,
+      ...details(),
+      ...(sealed ? { vault: sealed } : {}),
+      telemetry: logSinkHealth(),
+    });
   });
   return app;
 }

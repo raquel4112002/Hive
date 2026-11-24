@@ -138,7 +138,7 @@ services:
         - CMD
         - node
         - -e
-        - fetch('http://127.0.0.1:3100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+        - fetch('http://127.0.0.1:3100/ready').then(async r=>{const b=await r.json().catch(()=>({}));if(b.vault){console.log(b.vault);return}if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
       interval: 2s
       timeout: 5s
       retries: 45

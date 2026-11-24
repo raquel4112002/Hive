@@ -17,6 +17,7 @@ import {
   toComputerRef,
   issueBotModelKey,
   revokeBotModelKey,
+  revokeBotVault,
   unblockBotModelKey,
   validateBotModelChange,
 } from "@rakazo/adapters";
@@ -542,6 +543,7 @@ export function botsRoutes(ctx: RouterContext) {
       archive: authed.bots.archive.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId, { includeArchived: true });
         await revokeBotModelKey(modelKeyDeps(deps), bot.id, "block");
+        await revokeBotVault(deps.secrets, bot.id);
         await archiveBot(
           {
             prisma: deps.prisma,
