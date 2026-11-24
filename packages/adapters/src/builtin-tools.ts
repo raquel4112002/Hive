@@ -1669,6 +1669,19 @@ export const builtinAgentTools: ConnectorTool[] = [
     },
   },
   {
+    name: "search_knowledge",
+    description:
+      "Search this bot's documents. Cite only the returned sources, with the document, the section or page, and the version date. If the result says nothing was found, say that and do not name a document.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to look up." },
+      },
+      required: ["query"],
+    },
+    readOnly: true,
+  },
+  {
     name: "update_preferences",
     description:
       "Read or change the user's own account preferences: timezone and Rakazo marketing emails. Change them only when the user asks. Call with no fields to read the current values. Email, password, sign-in, billing and account deletion are only in the app's settings.",

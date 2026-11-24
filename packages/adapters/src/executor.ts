@@ -60,6 +60,7 @@ import {
   loadRunLoginRedactions,
 } from "./bot-secrets.js";
 import { loadHiveCredentialValues, sealedVaultRunError } from "./hive-bot-vault.js";
+import { knowledgeForTurn } from "./hive-knowledge.js";
 import { createBrowserProvider } from "./browser-provider-factory.js";
 import { partitionTools } from "./builtin-tool-bridge.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
@@ -1612,6 +1613,13 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               contextStrategy: deps.contextStrategy,
               instructions: userTurnInstructions({
                 botInstructions: runIdentityInstruction(bot, run.trigger),
+                knowledgeContext: await knowledgeForTurn(deps.prisma, {
+                  botId: bot.id,
+                  botUserId: bot.userId,
+                  runUserId: run.userId,
+                  routineId: run.routineId,
+                  query: taskPrompt,
+                }).catch(() => undefined),
                 groupContext,
                 messagingContext,
                 redactedMemoryContext: memoryContext

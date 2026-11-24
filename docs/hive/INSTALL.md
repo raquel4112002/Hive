@@ -127,3 +127,37 @@ docker run --rm -v <project>_openbao_backup:/from -v <project>_openbao_restore:/
 Point the OpenBao service at `<project>_openbao_restore` instead of `openbao`, start it, and run `bao operator unseal` until it is unsealed. A restore onto a new volume, unsealed with the saved keys, returned the credential that had been stored before the copy. Do not put the keys, the root token, or a credential value in git, in a log, or in a backup note.
 
 More detail on secrets, models, and production TLS is in [docs/self-host.md](../self-host.md) and [docs/self-host-secrets.md](../self-host-secrets.md). The credential rules are in [PHASE4.md](PHASE4.md).
+
+## Knowledge
+
+Knowledge files need a Postgres image that includes pgvector. The Compose files use `pgvector/pgvector`. A volume created by Postgres 18 stays valid when the image changes to the pgvector build of the same major version. Apply the migrations after that image is the one running.
+
+MinIO keeps the original files. A plain `up` does not start it. Start it with the `knowledge` profile:
+
+```bash
+docker compose --env-file .env -f infra/compose/docker-compose.yml --profile knowledge up -d minio
+```
+
+The public MinIO registries no longer allow an anonymous pull, so the service uses the Chainguard MinIO image. It is the MinIO server. Set these in `.env` and recreate the API and the worker. They stay on the server. The browser never receives them.
+
+```bash
+HIVE_KNOWLEDGE_ENDPOINT=http://minio:9000
+HIVE_KNOWLEDGE_BUCKET=hive-knowledge
+HIVE_KNOWLEDGE_ACCESS_KEY=hive-knowledge
+HIVE_KNOWLEDGE_SECRET_KEY=replace-with-a-long-password
+```
+
+The access key needs at least 3 characters and the secret at least 8. The first upload creates the bucket.
+
+Embeddings go to LiteLLM at `HIVE_LITELLM_BASE_URL` when that is set, and otherwise to `HIVE_MODEL_BASE_URL`. Both speak the same embeddings API. Set `HIVE_EMBEDDING_MODEL` to a model that returns 768 numbers, for example an embedding model served by Ollama through LiteLLM. Leave it blank and a document stays failed with no vectors stored.
+
+### Backup and restore
+
+Stop MinIO and copy the `minio` volume next to the Postgres backup and the OpenBao backup. Restoring the database without this volume loses the original files. Restoring the volume without the database loses the chunks, the embeddings, and the permissions.
+
+```bash
+docker compose --env-file .env -f infra/compose/docker-compose.yml stop minio
+docker run --rm -v <project>_minio:/from -v <project>_minio_backup:/to alpine tar -C /from -cf /to/minio.tar .
+```
+
+On a clean server, create `<project>_minio_restore`, unpack the archive into it, point the MinIO service at that volume, and start it with the same access key and secret. The knowledge rules are in [PHASE5.md](PHASE5.md).

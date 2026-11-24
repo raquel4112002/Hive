@@ -100,6 +100,11 @@ x-app-environment: &app-environment
   HIVE_LITELLM_MASTER_KEY:
   # Public signup stays off after the first organization unless this is true.
   HIVE_ALLOW_SIGNUP:
+  HIVE_EMBEDDING_MODEL:
+  HIVE_KNOWLEDGE_ENDPOINT:
+  HIVE_KNOWLEDGE_BUCKET:
+  HIVE_KNOWLEDGE_ACCESS_KEY:
+  HIVE_KNOWLEDGE_SECRET_KEY:
   PI_DEFAULT_CREDENTIALS:
   PI_SESSION_RECORDING:
   RAKAZO_LIVE_MODEL_CATALOG:
@@ -281,7 +286,7 @@ x-app-environment: &app-environment
 services:
   postgres:
     # Optional Hub override; unset keeps the digest-pinned official image.
-    image: ${POSTGRES_IMAGE:-postgres:16@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5}
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16@sha256:484e838076e04939d27d3e176e91c86eea96236126023be8d3059761122e579f}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

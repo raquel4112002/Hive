@@ -98,6 +98,11 @@ x-app-environment: &app-environment
   HIVE_LITELLM_MASTER_KEY:
   # Public signup stays off after the first organization unless this is true.
   HIVE_ALLOW_SIGNUP:
+  HIVE_EMBEDDING_MODEL:
+  HIVE_KNOWLEDGE_ENDPOINT:
+  HIVE_KNOWLEDGE_BUCKET:
+  HIVE_KNOWLEDGE_ACCESS_KEY:
+  HIVE_KNOWLEDGE_SECRET_KEY:
   PI_DEFAULT_CREDENTIALS:
   PI_SESSION_RECORDING:
   RAKAZO_LIVE_MODEL_CATALOG:
@@ -278,7 +283,7 @@ x-app-environment: &app-environment
 
 services:
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6}
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg18@sha256:38681dc6eaf55308e2a4c6de392d131652dcfac70e1263e35cd9b5ea3fe39782}
     # A Postgres 16 POSTGRES_IMAGE would ignore these mounts and open an empty database.
     entrypoint:
       - sh
@@ -323,12 +328,12 @@ services:
     profiles: [pitr]
     # Tagged with a hash of Dockerfile.pitr and pitr-agent.sh, so a deploy builds it once per change
     # instead of on every run (compose-service.test.ts checks the hash).
-    image: rakazo-pitr:aa7cf1bde2aa8051
+    image: rakazo-pitr:8a9765364e88f7e9
     build:
       context: .
       dockerfile: Dockerfile.pitr
       args:
-        POSTGRES_IMAGE: ${POSTGRES_IMAGE:-postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6}
+        POSTGRES_IMAGE: ${POSTGRES_IMAGE:-pgvector/pgvector:pg18@sha256:38681dc6eaf55308e2a4c6de392d131652dcfac70e1263e35cd9b5ea3fe39782}
     restart: unless-stopped
     init: true
     logging: *logging
@@ -704,7 +709,7 @@ services:
   # pass `--profile litellm`. The API reads HIVE_LITELLM_BASE_URL (http://litellm:4000).
   litellm-db:
     profiles: [litellm]
-    image: ${POSTGRES_IMAGE:-postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6}
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg18@sha256:38681dc6eaf55308e2a4c6de392d131652dcfac70e1263e35cd9b5ea3fe39782}
     restart: unless-stopped
     logging: *logging
     security_opt:
@@ -788,9 +793,40 @@ services:
     networks:
       - app
 
+  # Optional knowledge files. A plain `up` does not start it; pass `--profile knowledge`.
+  minio-perms:
+    profiles: [knowledge]
+    image: cgr.dev/chainguard/minio@sha256:f2e56aceb4d38ad9b05c901270946e2353b19f86ba4396f25cf75b15b455b38c
+    user: "0:0"
+    entrypoint: ["/usr/bin/chown", "-R", "65532:65532", "/data"]
+    volumes:
+      - minio:/data
+    restart: "no"
+    networks:
+      - app
+  minio:
+    profiles: [knowledge]
+    image: cgr.dev/chainguard/minio@sha256:f2e56aceb4d38ad9b05c901270946e2353b19f86ba4396f25cf75b15b455b38c
+    user: "65532:65532"
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${HIVE_KNOWLEDGE_ACCESS_KEY:-}
+      MINIO_ROOT_PASSWORD: ${HIVE_KNOWLEDGE_SECRET_KEY:-}
+    volumes:
+      - minio:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+    depends_on:
+      minio-perms:
+        condition: service_completed_successfully
+    networks:
+      - app
+
 volumes:
   postgres:
   openbao:
+  minio:
   pgdata:
   appdata:
   caddydata:

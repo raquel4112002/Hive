@@ -1,7 +1,7 @@
 # Point-in-time recovery sidecar and restore tool (docs/self-host-backups.md#point-in-time-recovery).
 # The same Postgres image as the database, so pg_receivewal, pg_basebackup and the restore server
 # match its major version, plus pinned, checksum-verified age and rclone.
-ARG POSTGRES_IMAGE=postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+ARG POSTGRES_IMAGE=pgvector/pgvector:pg18@sha256:38681dc6eaf55308e2a4c6de392d131652dcfac70e1263e35cd9b5ea3fe39782
 
 FROM ${POSTGRES_IMAGE} AS tools
 ARG TARGETARCH

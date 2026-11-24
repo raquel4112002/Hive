@@ -2,22 +2,27 @@
 // Derived from Rakazo (Apache License 2.0).
 
 import { ORPCError } from "@orpc/server";
-import { createLiteLLM, hiveLiteLLM, issueBotModelKey, listBotSpend, vaultHealth, writeHiveCredential } from "@rakazo/adapters";
+import { createLiteLLM, deleteHiveDocument, hiveLiteLLM, ingestHiveDocument, issueBotModelKey, listBotSpend, openKnowledgeStorage, reprocessHiveDocument, vaultHealth, writeHiveCredential } from "@rakazo/adapters";
 import {
   assignBotDepartment,
+  createHiveCollection,
   createHiveInvite,
   ensureEveryoneDepartment,
   inspectConversation,
   linkBotConnection,
+  linkHiveCollection,
   listBotPosts,
+  listHiveCollections,
   listHiveCredentials,
-  readBotPostArtifact,
+  listHiveDocuments,
   readHiveRole,
+  readBotPostArtifact,
   removeHiveCredential,
   IsolationError,
   runAsSystem,
   setBotPublication,
 } from "@rakazo/db";
+import type { KnowledgeGrant, PrismaClient } from "@rakazo/db";
 import type { RouterContext } from "./context.js";
 
 function keyDeps(ctx: RouterContext) {
@@ -32,6 +37,49 @@ async function requireHiveAdmin(ctx: RouterContext, userId: string, spaceId: str
   const hive = await readHiveRole(ctx.deps.prisma, { userId, spaceId });
   if (!hive || hive.archived || hive.role === "USER") throw new IsolationError();
   return hive;
+}
+
+function mimeFor(fileName: string): string {
+  const name = fileName.toLowerCase();
+  if (name.endsWith(".pdf")) return "application/pdf";
+  if (name.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (name.endsWith(".md")) return "text/markdown";
+  return "text/plain";
+}
+
+async function knowledgeGrants(
+  prisma: PrismaClient,
+  organizationId: string,
+  grants: Array<{ kind: KnowledgeGrant["kind"]; subjectId?: string }>,
+): Promise<KnowledgeGrant[]> {
+  const accepted: KnowledgeGrant[] = [];
+  for (const grant of grants) {
+    if (grant.kind === "organization") {
+      accepted.push({ kind: "organization", subjectId: organizationId });
+      continue;
+    }
+    if (!grant.subjectId) throw new IsolationError();
+    if (grant.kind === "department") {
+      const department = await runAsSystem("hive knowledge department", () =>
+        prisma.department.findFirst({
+          where: { id: grant.subjectId, organizationId },
+          select: { id: true },
+        }),
+      );
+      if (!department) throw new IsolationError();
+      accepted.push({ kind: "department", subjectId: department.id });
+      continue;
+    }
+    const role = await runAsSystem("hive knowledge person", () =>
+      prisma.hiveRole.findFirst({
+        where: { organizationId, userId: grant.subjectId },
+        select: { userId: true },
+      }),
+    );
+    if (!role) throw new IsolationError();
+    accepted.push({ kind: "person", subjectId: role.userId });
+  }
+  return accepted;
 }
 
 export function hiveRoutes(ctx: RouterContext) {
@@ -147,6 +195,100 @@ export function hiveRoutes(ctx: RouterContext) {
           value: input.value,
           actorUserId: context.actor.userId,
         });
+      }),
+      members: authed.hive.members.handler(async ({ context }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const roles = await runAsSystem("hive members", () =>
+          deps.prisma.hiveRole.findMany({
+            where: { organizationId: hive.organizationId },
+            select: { userId: true },
+          }),
+        );
+        return runAsSystem("hive member names", () =>
+          deps.prisma.user.findMany({
+            where: {
+              id: { in: roles.map((role) => role.userId) },
+              hiveService: false,
+              hiveArchivedAt: null,
+            },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+          }),
+        );
+      }),
+      collections: authed.hive.collections.handler(async ({ context }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        return listHiveCollections(deps.prisma, hive.organizationId);
+      }),
+      createCollection: authed.hive.createCollection.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        return createHiveCollection(deps.prisma, {
+          organizationId: hive.organizationId,
+          name: input.name,
+          actorUserId: context.actor.userId,
+        });
+      }),
+      linkCollection: authed.hive.linkCollection.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const bot = await deps.prisma.bot.findFirst({
+          where: { id: input.botId, spaceId: context.actor.spaceId },
+          select: { id: true },
+        });
+        if (!bot) throw new IsolationError();
+        await linkHiveCollection(deps.prisma, {
+          organizationId: hive.organizationId,
+          collectionId: input.collectionId,
+          botId: input.botId,
+        });
+        return { ok: true as const };
+      }),
+      documents: authed.hive.documents.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        return listHiveDocuments(deps.prisma, {
+          organizationId: hive.organizationId,
+          collectionId: input.collectionId,
+        });
+      }),
+      saveDocument: authed.hive.saveDocument.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const storage = await openKnowledgeStorage();
+        if (!storage) throw new ORPCError("BAD_REQUEST", { message: "Knowledge storage is not configured." });
+        const grants = await knowledgeGrants(deps.prisma, hive.organizationId, input.grants);
+        const bytes = Buffer.from(input.body, "base64");
+        if (bytes.length === 0 || bytes.length > 8_000_000) {
+          throw new ORPCError("BAD_REQUEST", { message: "The file is empty or too large." });
+        }
+        return ingestHiveDocument(deps.prisma, storage, {
+          organizationId: hive.organizationId,
+          collectionId: input.collectionId,
+          title: input.title,
+          fileName: input.fileName,
+          mimeType: mimeFor(input.fileName),
+          bytes,
+          actorUserId: context.actor.userId,
+          grants,
+          ocr: input.ocr,
+        });
+      }),
+      reprocessDocument: authed.hive.reprocessDocument.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const storage = await openKnowledgeStorage();
+        if (!storage) throw new ORPCError("BAD_REQUEST", { message: "Knowledge storage is not configured." });
+        const grants = await knowledgeGrants(deps.prisma, hive.organizationId, input.grants);
+        return reprocessHiveDocument(deps.prisma, storage, {
+          organizationId: hive.organizationId,
+          documentId: input.documentId,
+          actorUserId: context.actor.userId,
+          grants,
+        });
+      }),
+      removeDocument: authed.hive.removeDocument.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        await deleteHiveDocument(deps.prisma, await openKnowledgeStorage(), {
+          organizationId: hive.organizationId,
+          documentId: input.documentId,
+        });
+        return { ok: true as const };
       }),
       removeCredential: authed.hive.removeCredential.handler(async ({ context, input }) => {
         const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);

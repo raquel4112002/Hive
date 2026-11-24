@@ -2439,3 +2439,74 @@ model HiveCredentialEvent {
   @@index([botId, createdAt])
   @@map("hive_credential_events")
 }
+
+/// Hive modification: a named set of documents an admin can attach to bots.
+model HiveKnowledgeCollection {
+  id              String   @id
+  organizationId  String
+  name            String
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  @@index([organizationId])
+  @@map("hive_knowledge_collections")
+}
+
+/// Hive modification: which bots may search a collection. The chunk ACL still decides who sees a hit.
+model HiveCollectionBot {
+  collectionId String
+  botId        String
+
+  @@id([collectionId, botId])
+  @@index([botId])
+  @@map("hive_collection_bots")
+}
+
+/// Hive modification: one uploaded document. The bytes live in object storage, not here.
+model HiveKnowledgeDocument {
+  id              String    @id
+  organizationId  String
+  collectionId    String
+  title           String
+  objectKey       String
+  mimeType        String
+  status          String
+  error           String?
+  ocr             Boolean   @default(false)
+  versionAt       DateTime?
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([collectionId])
+  @@map("hive_knowledge_documents")
+}
+
+/// Hive modification: a piece of a document. embedding is vector(768), written with raw SQL.
+model HiveKnowledgeChunk {
+  id             String                       @id
+  documentId     String
+  organizationId String
+  ordinal        Int
+  section        String                       @default("")
+  page           Int?
+  content        String
+  embedding      Unsupported("vector(768)")
+  versionAt      DateTime
+
+  @@index([documentId])
+  @@map("hive_knowledge_chunks")
+}
+
+/// Hive modification: who may read a document, copied onto each chunk so search can filter in SQL.
+model HiveKnowledgeAcl {
+  id         String  @id
+  documentId String
+  chunkId    String?
+  kind       String
+  subjectId  String
+
+  @@index([documentId])
+  @@index([chunkId])
+  @@map("hive_knowledge_acl")
+}

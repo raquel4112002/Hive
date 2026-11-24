@@ -91,6 +91,13 @@ x-app-environment: &app-environment
   HIVE_LITELLM_MASTER_KEY:
   # Public signup stays off after the first organization unless this is true.
   HIVE_ALLOW_SIGNUP:
+  # Embeddings for knowledge search. The request goes to LiteLLM, or to the installation model when the proxy is off.
+  HIVE_EMBEDDING_MODEL:
+  # MinIO for original knowledge files. Start it with --profile knowledge. Never send these to the browser.
+  HIVE_KNOWLEDGE_ENDPOINT:
+  HIVE_KNOWLEDGE_BUCKET:
+  HIVE_KNOWLEDGE_ACCESS_KEY:
+  HIVE_KNOWLEDGE_SECRET_KEY:
   PI_DEFAULT_CREDENTIALS:
   PI_SESSION_RECORDING:
   RAKAZO_LIVE_MODEL_CATALOG:
@@ -271,7 +278,7 @@ x-app-environment: &app-environment
 
 services:
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:18}
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg18@sha256:38681dc6eaf55308e2a4c6de392d131652dcfac70e1263e35cd9b5ea3fe39782}
     # A Postgres 16 POSTGRES_IMAGE would ignore these mounts and open an empty database.
     entrypoint:
       - sh
@@ -518,8 +525,35 @@ services:
     ports:
       - "127.0.0.1:8200:8200"
 
+  # Optional knowledge files. A plain `up` does not start it; pass `--profile knowledge`.
+  minio-perms:
+    profiles: [knowledge]
+    image: cgr.dev/chainguard/minio@sha256:f2e56aceb4d38ad9b05c901270946e2353b19f86ba4396f25cf75b15b455b38c
+    user: "0:0"
+    entrypoint: ["/usr/bin/chown", "-R", "65532:65532", "/data"]
+    volumes:
+      - minio:/data
+    restart: "no"
+  minio:
+    profiles: [knowledge]
+    image: cgr.dev/chainguard/minio@sha256:f2e56aceb4d38ad9b05c901270946e2353b19f86ba4396f25cf75b15b455b38c
+    user: "65532:65532"
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${HIVE_KNOWLEDGE_ACCESS_KEY:-}
+      MINIO_ROOT_PASSWORD: ${HIVE_KNOWLEDGE_SECRET_KEY:-}
+    volumes:
+      - minio:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+    depends_on:
+      minio-perms:
+        condition: service_completed_successfully
+
 volumes:
   postgres:
   openbao:
+  minio:
   pgdata:
   webassets:

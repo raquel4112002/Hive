@@ -17,7 +17,7 @@ export async function startPostgres(signal?: AbortSignal) {
   for (let attempt = 1; ; attempt += 1) {
     try {
       // A throwaway database needs no crash safety; parallel suites need more connections.
-      return await new PostgreSqlContainer("postgres:18-alpine")
+      return await new PostgreSqlContainer("pgvector/pgvector:pg18")
         .withCommand([
           "postgres",
           "-c",

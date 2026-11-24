@@ -119,7 +119,7 @@ describe("the updater compose service", () => {
     expect(updater.image).toContain("hive/updater");
     expect(compose.services.api?.image).toContain("hive/app");
     expect(compose.services.postgres?.image).toMatch(
-      /^\$\{POSTGRES_IMAGE:-postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6\}$/,
+      /^\$\{POSTGRES_IMAGE:-pgvector\/pgvector:pg18@sha256:38681dc6eaf55308e2a4c6de392d131652dcfac70e1263e35cd9b5ea3fe39782\}$/,
     );
     expect(compose.services.caddy?.image).toMatch(
       /^\$\{CADDY_IMAGE:-caddy:2@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d\}$/,
@@ -229,7 +229,7 @@ describe("the point-in-time recovery sidecar", () => {
 
   it("builds on the same pinned Postgres image as the database", () => {
     const dockerfile = readFileSync(path.join(composeDir, "Dockerfile.pitr"), "utf8");
-    const pinned = compose.services.postgres?.image?.match(/postgres:18@sha256:[0-9a-f]{64}/)?.[0];
+    const pinned = compose.services.postgres?.image?.match(/pgvector\/pgvector:pg18@sha256:[0-9a-f]{64}/)?.[0];
     expect(pinned).toBeDefined();
     expect(dockerfile).toContain(`ARG POSTGRES_IMAGE=${pinned}`);
     expect(pitr.build).toMatchObject({

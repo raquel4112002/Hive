@@ -38,7 +38,7 @@ const DEFAULT_PORTS = { web: 5173, api: 3100, supervisor: 7091 };
 const PORT_STEP = 10;
 const MANAGED = {
   container: "rakazo-dev-postgres",
-  image: "postgres:18",
+  image: "pgvector/pgvector:pg18",
   port: 54318,
   owner: "rakazo",
   runtime: "rakazo_dev",

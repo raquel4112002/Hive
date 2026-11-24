@@ -1427,6 +1427,78 @@ export const appContract = {
     removeCredential: oc
       .input(z.object({ botId: Id, label: z.string().trim().min(1).max(80) }))
       .output(z.object({ ok: z.literal(true) })),
+    members: oc.output(z.array(z.object({ id: Id, name: z.string() }))),
+    collections: oc.output(
+      z.array(z.object({ id: Id, name: z.string(), botIds: z.array(Id) })),
+    ),
+    createCollection: oc
+      .input(z.object({ name: z.string().trim().min(1).max(80) }))
+      .output(z.object({ id: Id, name: z.string() })),
+    linkCollection: oc
+      .input(z.object({ collectionId: Id, botId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
+    documents: oc.input(z.object({ collectionId: Id })).output(
+      z.array(
+        z.object({
+          id: Id,
+          title: z.string(),
+          status: z.string(),
+          error: z.string().nullable(),
+          versionAt: z.string().nullable(),
+          grants: z.array(
+            z.object({
+              kind: z.enum(["organization", "department", "person"]),
+              subjectId: Id,
+            }),
+          ),
+        }),
+      ),
+    ),
+    saveDocument: oc
+      .input(
+        z.object({
+          collectionId: Id,
+          title: z.string().trim().min(1).max(160),
+          fileName: z.string().trim().min(1).max(200),
+          body: z.string().min(1).max(12_000_000),
+          grants: z
+            .array(
+              z.object({
+                kind: z.enum(["organization", "department", "person"]),
+                subjectId: z.string().trim().min(1).max(80).optional(),
+              }),
+            )
+            .min(1)
+            .max(20),
+          ocr: z.boolean().optional(),
+        }),
+      )
+      .output(
+        z.object({
+          id: Id,
+          status: z.string(),
+          error: z.string().nullable(),
+        }),
+      ),
+    reprocessDocument: oc
+      .input(
+        z.object({
+          documentId: Id,
+          grants: z
+            .array(
+              z.object({
+                kind: z.enum(["organization", "department", "person"]),
+                subjectId: z.string().trim().min(1).max(80).optional(),
+              }),
+            )
+            .min(1)
+            .max(20),
+        }),
+      )
+      .output(z.object({ id: Id, status: z.string(), error: z.string().nullable() })),
+    removeDocument: oc
+      .input(z.object({ documentId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
   },
   posts: {
     list: oc.input(z.object({ botId: Id })).output(
