@@ -440,7 +440,10 @@ describe("identity trust through auth endpoints", () => {
         notificationPreference: { create: async () => ({}) },
       });
       Object.assign(f.prisma.member, { create: async () => ({}) });
-      Object.assign(f.prisma.spaceMember, { create: async () => ({}) });
+      Object.assign(f.prisma.spaceMember, {
+        create: async () => ({}),
+        upsert: async () => ({}),
+      });
       const response = await f.request("/sign-up/email", {
         email: "approved@example.test",
         password: "offline-password12",

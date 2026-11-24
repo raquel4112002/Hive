@@ -2536,3 +2536,30 @@ model HiveBotAvatar {
   @@index([organizationId])
   @@map("hive_bot_avatars")
 }
+
+/// Hive modification: the organization's SSO. The client secret stays in the vault.
+model HiveSso {
+  organizationId String   @id
+  issuer         String   @default("")
+  clientId       String   @default("")
+  secretRef      String?
+  enabled        Boolean  @default(false)
+  passwordLogin  Boolean  @default(true)
+  groupMap       String   @default("")
+  updatedAt      DateTime @updatedAt
+
+  @@map("hive_sso")
+}
+
+/// Hive modification: the IdP subject last seen for a person.
+model HiveSsoSubject {
+  organizationId String
+  userId         String
+  subject        String
+  removedAt      DateTime?
+  updatedAt      DateTime @updatedAt
+
+  @@id([organizationId, subject])
+  @@index([userId])
+  @@map("hive_sso_subjects")
+}

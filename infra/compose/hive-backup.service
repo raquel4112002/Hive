@@ -1,0 +1,8 @@
+[Unit]
+Description=Hive backup
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/hive
+EnvironmentFile=/opt/hive/.env
+ExecStart=/opt/hive/scripts/hive-backup.sh

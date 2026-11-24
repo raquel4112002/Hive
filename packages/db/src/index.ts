@@ -32,6 +32,7 @@ export * from "./hive.js";
 export * from "./hive-credentials.js";
 export * from "./hive-knowledge.js";
 export * from "./hive-brand.js";
+export * from "./hive-sso.js";
 export * from "./hive-invite.js";
 export * from "./hive-access.js";
 export * from "./history-retrieval.js";

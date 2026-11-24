@@ -13,7 +13,9 @@ import type { PrismaClient, SecurityEventType } from "@rakazo/db";
 import {
   acceptHiveInvite,
   bootstrapUserSpace,
+  hivePasswordBlocked,
   hivePublicSignupClosed,
+  joinHiveSsoUser,
   peekHiveInvite,
   personalOrganizationIds,
   recordSecurityEvent,
@@ -148,6 +150,39 @@ export function authRateLimitOptions(nodeEnv = process.env.NODE_ENV) {
   };
 }
 
+async function hiveOidcIdentity(
+  prisma: PrismaClient,
+  userId: string,
+  tokenKey: () => Promise<TokenKey>,
+): Promise<{ groups: string[]; subject: string }> {
+  const empty = { groups: [] as string[], subject: "" };
+  const accounts = prisma.account as {
+    findFirst?: (args: object) => Promise<{ idToken?: string | null } | null>;
+  };
+  if (typeof accounts.findFirst !== "function") return empty;
+  const account = await accounts.findFirst({
+    where: { userId, providerId: "oidc" },
+    select: { idToken: true },
+  });
+  const raw = account?.idToken ? await openIdToken(await tokenKey(), account.idToken) : null;
+  if (!raw?.includes(".")) return empty;
+  try {
+    const claims = JSON.parse(Buffer.from(raw.split(".")[1] ?? "", "base64url").toString()) as {
+      sub?: unknown;
+      groups?: unknown;
+    };
+    const value = claims.groups;
+    const groups = Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : typeof value === "string" && value
+        ? [value]
+        : [];
+    return { groups, subject: typeof claims.sub === "string" ? claims.sub : "" };
+  } catch {
+    return empty;
+  }
+}
+
 export function createAuth(prisma: PrismaClient, env: AuthEnv) {
   if (env.passwordAuth === false && !env.oidc)
     throw new Error("Password auth requires OIDC when disabled");
@@ -244,10 +279,11 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         }
         if (source.action === "create-user") {
           const policy = signupPolicyFromEnv(env);
-          if (!policy.enabled) return { error: "REGISTRATION_CLOSED" };
-          if (!env.oidc?.allowSignupBypass && !emailAllowed(email, policy.allowlist))
+          const hiveJoin = verified && (await hivePublicSignupClosed(prisma));
+          if (!policy.enabled && !hiveJoin) return { error: "REGISTRATION_CLOSED" };
+          if (!hiveJoin && !env.oidc?.allowSignupBypass && !emailAllowed(email, policy.allowlist))
             return { error: "EMAIL_NOT_ALLOWED" };
-          if (!env.oidc?.allowSignupBypass && policy.allowlist.length > 0 && !verified)
+          if (!hiveJoin && !env.oidc?.allowSignupBypass && policy.allowlist.length > 0 && !verified)
             return { error: "EMAIL_VERIFICATION_REQUIRED" };
           return;
         }
@@ -537,6 +573,28 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
                 message: "Email verification required",
               });
             }
+            const archived =
+              typeof prisma.user?.findUnique === "function"
+                ? await prisma.user.findUnique({
+                    where: { id: user.id },
+                    select: { hiveArchivedAt: true },
+                  })
+                : null;
+            if (
+              archived?.hiveArchivedAt ||
+              (user as { hiveArchivedAt?: Date | string | null }).hiveArchivedAt
+            ) {
+              throw new APIError("FORBIDDEN", {
+                code: "ACCOUNT_DISABLED",
+                message: "This account is disabled.",
+              });
+            }
+            if (!oidcSignIn && (await hivePasswordBlocked(prisma, user.id))) {
+              throw new APIError("FORBIDDEN", {
+                code: "PASSWORD_DISABLED",
+                message: "Sign in with SSO.",
+              });
+            }
             if (!user.emailVerified && policy.allowlist.length > 0 && !bypassAllowlist) {
               throw new APIError("FORBIDDEN", {
                 code: "EMAIL_VERIFICATION_REQUIRED",
@@ -545,10 +603,15 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             }
             // Only admitted sessions provision a workspace; never assign administration.
             const membership = await prisma.spaceMember.findFirst({ where: { userId: user.id } });
+            const hiveSsoJoin =
+              oidcSignIn && user.emailVerified && (await hivePublicSignupClosed(prisma));
             if (!membership) {
               const inviteToken = takeHiveInvite(user.email);
               if (inviteToken) {
                 await acceptHiveInvite(prisma, user, inviteToken);
+              } else if (hiveSsoJoin) {
+                const identity = await hiveOidcIdentity(prisma, user.id, tokenKey);
+                await joinHiveSsoUser(prisma, user, identity.groups, identity.subject);
               } else {
                 if (
                   !policy.enabled ||
@@ -562,6 +625,9 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
                 }
                 await bootstrapUserSpace(prisma, user, env);
               }
+            } else if (hiveSsoJoin) {
+              const identity = await hiveOidcIdentity(prisma, user.id, tokenKey);
+              await joinHiveSsoUser(prisma, user, identity.groups, identity.subject);
             }
           },
           after: async (session, ctx) => {

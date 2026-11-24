@@ -1430,6 +1430,45 @@ export const appContract = {
         }),
       )
       .output(z.object({ ok: z.literal(true) })),
+    sso: oc.output(
+      z.object({
+        issuer: z.string(),
+        clientId: z.string(),
+        enabled: z.boolean(),
+        passwordLogin: z.boolean(),
+        groupMap: z.string(),
+        secretSet: z.boolean(),
+      }),
+    ),
+    saveSso: oc
+      .input(
+        z.object({
+          issuer: z.string().trim().max(300),
+          clientId: z.string().trim().max(200),
+          secret: z.string().max(500).optional(),
+          enabled: z.boolean(),
+          passwordLogin: z.boolean(),
+          groupMap: z.string().max(4_000),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+    ssoSync: oc
+      .input(z.object({ subjects: z.array(z.string().min(1).max(200)).max(500) }))
+      .output(z.object({ removed: z.number() })),
+    deactivate: oc.input(z.object({ userId: Id })).output(z.object({ ok: z.literal(true) })),
+    status: oc.output(
+      z.object({
+        version: z.string(),
+        profiles: z.object({
+          litellm: z.boolean(),
+          vault: z.boolean(),
+          knowledge: z.boolean(),
+          sso: z.boolean(),
+        }),
+        vault: z.enum(["open", "sealed", "off"]),
+        diskFreeBytes: z.number().nullable(),
+      }),
+    ),
     vaultStatus: oc.output(z.object({ sealed: z.boolean() })),
     credentials: oc.input(z.object({ botId: Id })).output(
       z.array(

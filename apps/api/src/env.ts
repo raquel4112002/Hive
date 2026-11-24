@@ -180,11 +180,22 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       "OIDC_ISSUER, OIDC_CLIENT_ID and OIDC_CLIENT_SECRET must be configured together",
     );
   }
+  const allowInsecureIssuer = source.OIDC_ALLOW_INSECURE === "true";
   if (issuer) {
     try {
       const url = new URL(issuer);
-      if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash)
-        throw new Error();
+      const secure = url.protocol === "https:" || (allowInsecureIssuer && url.protocol === "http:");
+      if (!secure || url.username || url.password || url.search || url.hash) throw new Error();
+    } catch {
+      throw new Error("OIDC_ISSUER must be an HTTPS issuer URL");
+    }
+  }
+  const discoveryIssuer = optional(source.OIDC_DISCOVERY_URL);
+  if (discoveryIssuer) {
+    try {
+      const url = new URL(discoveryIssuer);
+      const secure = url.protocol === "https:" || (allowInsecureIssuer && url.protocol === "http:");
+      if (!secure || url.username || url.password || url.search || url.hash) throw new Error();
     } catch {
       throw new Error("OIDC_ISSUER must be an HTTPS issuer URL");
     }
@@ -193,6 +204,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     "AUTH_PASSWORD_ENABLED",
     "AUTH_BREACHED_PASSWORD_CHECK_ENABLED",
     "OIDC_ALLOW_SIGNUP_BYPASS",
+    "OIDC_ALLOW_INSECURE",
   ]) {
     const value = source[key];
     if (value && !["true", "false"].includes(value))
@@ -212,6 +224,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
             .split(/[\s,]+/)
             .filter(Boolean),
           allowSignupBypass: source.OIDC_ALLOW_SIGNUP_BYPASS === "true",
+          ...(discoveryIssuer ? { discoveryIssuer } : {}),
         }
       : undefined;
   const authSecret = resolveAuthSecret(source);

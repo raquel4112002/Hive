@@ -1,6 +1,8 @@
 // Hive modification: organization connections and conversation inspect.
 // Derived from Rakazo (Apache License 2.0).
 
+import { statfsSync } from "node:fs";
+import type { AdapterContext } from "@rakazo/adapter-kit";
 import { ORPCError } from "@orpc/server";
 import { brandColor, brandObjectKey, createLiteLLM, deleteHiveDocument, hiveBrandDefaults, hiveInviteMessage, hiveLiteLLM, ingestHiveDocument, inspectBrandImage, issueBotModelKey, listBotSpend, loadHiveBrand, openKnowledgeStorage, reprocessHiveDocument, vaultHealth, writeBrandFile, writeHiveCredential } from "@rakazo/adapters";
 import {
@@ -15,8 +17,12 @@ import {
   listHiveCollections,
   listHiveCredentials,
   listHiveDocuments,
+  endHiveSessions,
+  parseHiveGroupMap,
   readHiveBrand,
   readHiveRole,
+  removeHivePerson,
+  revokeMissingHiveSso,
   readBotPostArtifact,
   removeHiveCredential,
   saveHiveBotAvatar,
@@ -383,6 +389,122 @@ export function hiveRoutes(ctx: RouterContext) {
         await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
         const report = await listBotSpend(keyDeps(ctx), context.actor.spaceId, input.month);
         return { month: input.month, ...report };
+      }),
+      sso: authed.hive.sso.handler(async ({ context }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const row = await runAsSystem("read hive sso", () =>
+          deps.prisma.hiveSso.findUnique({ where: { organizationId: hive.organizationId } }),
+        );
+        return {
+          issuer: row?.issuer ?? "",
+          clientId: row?.clientId ?? "",
+          enabled: row?.enabled ?? false,
+          passwordLogin: row?.passwordLogin ?? true,
+          groupMap: row?.groupMap ?? "",
+          secretSet: Boolean(row?.secretRef),
+        };
+      }),
+      saveSso: authed.hive.saveSso.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        if (input.enabled && (!input.issuer || !input.clientId)) throw new ORPCError("BAD_REQUEST");
+        if (input.issuer) {
+          const url = new URL(input.issuer);
+          const insecure = process.env.OIDC_ALLOW_INSECURE === "true" && url.protocol === "http:";
+          if ((url.protocol !== "https:" && !insecure) || url.username || url.password) {
+            throw new ORPCError("BAD_REQUEST");
+          }
+        }
+        const lines = input.groupMap
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line && !line.startsWith("#"));
+        if (lines.length !== parseHiveGroupMap(input.groupMap).length) throw new ORPCError("BAD_REQUEST");
+        const current = await runAsSystem("read hive sso secret", () =>
+          deps.prisma.hiveSso.findUnique({
+            where: { organizationId: hive.organizationId },
+            select: { secretRef: true },
+          }),
+        );
+        let secretRef = current?.secretRef ?? null;
+        if (input.secret) {
+          const path = `org/${hive.organizationId}/bot/_sso/client`;
+          const secretContext: AdapterContext = {
+            operationId: "hive-sso",
+            traceId: "hive-sso",
+            userId: context.actor.userId,
+            spaceId: hive.organizationId,
+            signal: AbortSignal.timeout(10_000),
+          };
+          const stored = await deps.secrets.put(input.secret, secretContext, { recordId: path });
+          const loaded = await deps.secrets.load(
+            stored.ciphertext,
+            stored.ciphertext.startsWith("openbao:") ? "bot:_sso" : path,
+          );
+          if (loaded !== input.secret) throw new ORPCError("BAD_REQUEST");
+          secretRef = stored.ciphertext;
+        }
+        if (input.enabled && !secretRef) throw new ORPCError("BAD_REQUEST");
+        await runAsSystem("save hive sso", () =>
+          deps.prisma.hiveSso.upsert({
+            where: { organizationId: hive.organizationId },
+            create: {
+              organizationId: hive.organizationId,
+              issuer: input.issuer,
+              clientId: input.clientId,
+              secretRef,
+              enabled: input.enabled,
+              passwordLogin: input.passwordLogin,
+              groupMap: input.groupMap,
+              updatedAt: new Date(),
+            },
+            update: {
+              issuer: input.issuer,
+              clientId: input.clientId,
+              secretRef,
+              enabled: input.enabled,
+              passwordLogin: input.passwordLogin,
+              groupMap: input.groupMap,
+              updatedAt: new Date(),
+            },
+          }),
+        );
+        return { ok: true as const };
+      }),
+      ssoSync: authed.hive.ssoSync.handler(async ({ context, input }) => {
+        const hive = await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const removed = await revokeMissingHiveSso(deps.prisma, hive.organizationId, input.subjects);
+        return { removed: removed.length };
+      }),
+      deactivate: authed.hive.deactivate.handler(async ({ context, input }) => {
+        await removeHivePerson(deps.prisma, context.actor, input.userId);
+        await endHiveSessions(deps.prisma, input.userId);
+        return { ok: true as const };
+      }),
+      status: authed.hive.status.handler(async ({ context }) => {
+        await requireHiveAdmin(ctx, context.actor.userId, context.actor.spaceId);
+        const sealed = await vaultHealth();
+        const vaultOn = process.env.SECRET_STORE === "openbao";
+        let diskFreeBytes: number | null = null;
+        try {
+          const space = statfsSync(process.env.DATA_DIR || "/data");
+          diskFreeBytes = Number(space.bavail) * Number(space.bsize);
+        } catch {
+          diskFreeBytes = null;
+        }
+        const ssoRow = await runAsSystem("hive status sso", () =>
+          deps.prisma.hiveSso.findFirst({ where: { enabled: true }, select: { organizationId: true } }),
+        ).catch(() => null);
+        return {
+          version: process.env.RAKAZO_GIT_SHA ?? "",
+          profiles: {
+            litellm: Boolean(process.env.HIVE_LITELLM_BASE_URL),
+            vault: vaultOn,
+            knowledge: Boolean(process.env.HIVE_KNOWLEDGE_ENDPOINT),
+            sso: Boolean(process.env.OIDC_ISSUER) || Boolean(ssoRow),
+          },
+          vault: vaultOn ? (sealed ? "sealed" : "open") : "off",
+          diskFreeBytes,
+        };
       }),
       inspectConversation: authed.hive.inspectConversation.handler(async ({ context, input }) => {
         const opened = await inspectConversation(deps.prisma, context.actor, input);

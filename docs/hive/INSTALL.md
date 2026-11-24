@@ -174,3 +174,29 @@ HIVE_BRAND_LOGIN_TEXT=
 ```
 
 Leave the colors blank to keep the default ink. Logos, the favicon, and a bot avatar are PNG, SVG, or ICO, up to 512 KB. An SVG that contains a script is rejected. Files go to MinIO when the knowledge profile is running, and to the data directory otherwise. The brand rules are in [PHASE6.md](PHASE6.md).
+
+## Install script
+
+On Ubuntu or Debian, with Docker Engine 26 and the Compose plugin:
+
+```bash
+bash scripts/hive-install.sh --profile vault --profile knowledge
+```
+
+Profiles are `litellm`, `vault`, `knowledge`, `sso`, and `edge`. The script checks Docker, fills empty secrets in `.env`, refuses a compose file that publishes Postgres, OpenBao, MinIO, or LiteLLM on every interface, starts the stack, and waits until `/health` answers. It does not print the secrets.
+
+## SSO
+
+The `sso` profile starts Keycloak for a local proof. The browser uses `http://127.0.0.1:18080`. Set `OIDC_DISCOVERY_URL` to the internal issuer, `http://keycloak:8080/realms/hive`, so the API can fetch discovery while the browser stays on the loopback address. Set `OIDC_ALLOW_INSECURE=true` only for that HTTP issuer. A public issuer uses HTTPS and leaves the flag false. An admin saves the issuer, client id, and client secret in the bot panel. The secret goes to the vault. A new verified SSO account joins the organization as USER in Todos. An existing account links only while that person is signed in and uses the link flow. An unverified email does not link. A line in Groups such as `owners=ADMIN:Owners` maps an IdP group. Password login can be turned off; the founding SUPER_ADMIN can still sign in with a password. Removing a person in the IdP, then running the subject sync, archives that person and deletes their sessions. An admin can deactivate someone and end their sessions immediately.
+
+Entra ID uses the same fields. The issuer looks like `https://login.microsoftonline.com/<tenant>/v2.0`. The redirect URL is `https://<your-domain>/api/auth/callback/oidc`. The client secret is stored in the vault, not in the browser. SAML is not implemented. The same admin screen is where it would be added later.
+
+## HTTPS
+
+The `edge` profile publishes Caddy on ports 80 and 443. `infra/compose/Caddyfile` sends the site to the web app and sets the security headers. `tls internal` is the private certificate. For Let's Encrypt, remove that line and set `HIVE_DOMAIN` to the public name. Postgres, MinIO, OpenBao, Keycloak, and the API stay on `127.0.0.1`.
+
+## Update
+
+`scripts/hive-update.sh` writes a backup, rebuilds, and waits for `/health`. If that wait fails, restore the backup directory with `scripts/hive-restore.sh`. The daily timer is `infra/compose/hive-backup.timer`. Copy both unit files to systemd and set `HIVE_BACKUP_PASSPHRASE` in `.env`. `HIVE_BACKUP_KEEP` is the number of days to retain. `HIVE_BACKUP_TARGET` is another directory or an `s3://` URL.
+
+The backup contains a Postgres dump, the MinIO volume, the OpenBao volume, the data directory, and `.env` encrypted with that passphrase. Restore decrypts `.env`, loads the dump, unpacks the volumes, and starts the stack. The SSO, backup, and restore rules are in [PHASE7.md](PHASE7.md).

@@ -15,6 +15,7 @@ export interface OidcConfig {
   name: string;
   scopes: string[];
   allowSignupBypass: boolean;
+  discoveryIssuer?: string;
 }
 
 /** Discovery never gates API startup. Failed attempts share exponential backoff. */
@@ -24,7 +25,7 @@ export function oidcDiscovery(config: OidcConfig) {
       {
         providerId: "oidc",
         name: config.name,
-        discoveryUrl: `${config.issuer.replace(/\/$/, "")}/.well-known/openid-configuration`,
+        discoveryUrl: `${(config.discoveryIssuer ?? config.issuer).replace(/\/$/, "")}/.well-known/openid-configuration`,
         clientId: config.clientId,
         clientSecret: config.clientSecret,
         scopes: [...new Set(["openid", "email", "profile", ...config.scopes])],

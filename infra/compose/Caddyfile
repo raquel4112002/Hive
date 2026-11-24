@@ -1,0 +1,15 @@
+# Hive modification: the public HTTPS entry. Internal ports stay on the host loopback.
+# For Let's Encrypt, delete the `tls internal` line and set HIVE_DOMAIN to the public name.
+
+{$HIVE_DOMAIN:localhost} {
+	tls internal
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		-Server
+	}
+	reverse_proxy web:5173
+}

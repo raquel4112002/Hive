@@ -522,11 +522,41 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       jobs,
       accessToken: env.expoAccessToken,
     });
+  let oidc = env.oidc;
+  if (typeof prisma.hiveSso?.findMany === "function") {
+    const saved = await prisma.hiveSso
+      .findMany({ where: { enabled: true }, take: 2 })
+      .catch(() => []);
+    const row = saved.length === 1 ? saved[0] : undefined;
+    if (row?.issuer && row.clientId && row.secretRef) {
+      try {
+        const secret = await secrets.load(
+          row.secretRef,
+          row.secretRef.startsWith("openbao:")
+            ? "bot:_sso"
+            : `org/${row.organizationId}/bot/_sso/client`,
+        );
+        if (secret) {
+          oidc = {
+            issuer: row.issuer,
+            clientId: row.clientId,
+            clientSecret: secret,
+            name: "SSO",
+            scopes: ["openid", "email", "profile"],
+            allowSignupBypass: true,
+            ...(env.oidc?.discoveryIssuer ? { discoveryIssuer: env.oidc.discoveryIssuer } : {}),
+          };
+        }
+      } catch {
+        oidc = env.oidc;
+      }
+    }
+  }
   const auth = createAuth(prisma, {
     analytics,
     passwordAuth: env.passwordAuth,
     breachedPasswordCheck: env.breachedPasswordCheck,
-    oidc: env.oidc,
+    oidc,
     secret: env.authSecret,
     baseURL: env.authUrl,
     webOrigin: env.webOrigin,
